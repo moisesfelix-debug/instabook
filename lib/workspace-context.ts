@@ -4,9 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export const getWorkspaceContext = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { claims },
-  } = await supabase.auth.getClaims();
+  const { data: claimData } = await supabase.auth.getClaims();
+  const claims = claimData?.claims;
 
   const userId = typeof claims?.sub === "string" ? claims.sub : null;
 
