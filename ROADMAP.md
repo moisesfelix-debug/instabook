@@ -5,9 +5,12 @@
 - [x] Arquitetura multi-tenant
 - [x] Protótipo navegável inicial
 - [x] Repositório GitHub conectado
+- [x] Preview Vercel conectado ao repositório
 
 ## Fase 1 — fundação funcional
 - [x] Projeto Next.js
+- [x] Navegação base do produto
+- [x] Telas de criação, calendário, biblioteca, marcas, analytics e aprovações
 - [ ] Supabase
 - [ ] Autenticação
 - [ ] Workspaces + memberships
@@ -23,11 +26,11 @@
 - [ ] Exportação 1080x1350 / 1080x1080
 
 ## Fase 3 — operação
-- [ ] Biblioteca
-- [ ] Calendário
-- [ ] Aprovação
+- [x] Biblioteca — interface
+- [x] Calendário — interface
+- [x] Aprovação — interface
 - [ ] Comentários
-- [ ] Modo agência
+- [x] Modo agência — estrutura de interface
 
 ## Fase 4 — Instagram
 - [ ] Meta Developer App
