@@ -151,6 +151,7 @@ function buildSlideImagePrompt({
   headline,
   body,
   role,
+  placement,
 }: {
   brandName: string;
   segment: string | null;
@@ -161,6 +162,7 @@ function buildSlideImagePrompt({
   headline: string | null;
   body: string | null;
   role: string;
+  placement: "background" | "side" | "card" | "hero";
 }) {
   const direction =
     artDirection === "minimal"
@@ -172,13 +174,20 @@ function buildSlideImagePrompt({
   return [
     `Create a professional Instagram carousel visual asset for ${brandName}.`,
     `Brand segment: ${segment || "business"}.`,
-    `Content archetype: ${archetype}. Slide role: ${role}.`,
+    `Content archetype: ${archetype}. Slide role: ${role}. Visual placement: ${placement}.`,
     `Creative direction: ${direction}.`,
     `Semantic concept only (never reproduce this wording visually): ${headline || ""}. ${body || ""}`,
     primaryColor ? `Use ${primaryColor} only as a subtle photographic or material accent.` : "",
     secondaryColor ? `Secondary brand tone: ${secondaryColor}, used subtly.` : "",
     "OUTPUT MUST BE A PURE VISUAL ASSET, NOT A POSTER, NOT A SOCIAL MEDIA DESIGN AND NOT A FINISHED CAROUSEL SLIDE.",
     "Vertical 4:5 editorial photograph or illustration only. Show a scene, subject, object, texture or conceptual visual.",
+    placement === "background"
+      ? "Design it specifically as a subtle full-bleed background: strong atmosphere, simple focal structure, large clean negative space, low visual clutter and no poster-like composition."
+      : placement === "side"
+        ? "Compose the main subject predominantly on the right side, leaving the left half clean for typography."
+        : placement === "card"
+          ? "Create a compact editorial scene that crops well inside a rounded rectangular image card."
+          : "Create a strong hero image with one clear subject and premium campaign lighting.",
     "Leave intentional negative space where our separate layout engine can place typography later.",
     "ABSOLUTELY NO TEXT: no words, no letters, no numbers, no captions, no signs, no logos, no watermarks, no labels, no interface elements, no fake typography, no poster layout.",
     "Do not draw text-like marks or unreadable pseudo-letters. Avoid generic stock-photo aesthetics, obvious AI artifacts, cheesy business imagery and clutter.",
@@ -231,20 +240,32 @@ export async function generateCarouselVisuals(formData: FormData) {
     redirect(`/content/${contentId}?error=${encodeURIComponent("A marca desse conteúdo não foi encontrada.")}`);
   }
 
+  const cover = slides.find((slide) => slide.position === 1 && slide.slide_role !== "cta");
   const imageFirst = slides.filter(
-    (slide) => slide.slide_role !== "cta" && slide.visual_priority === "image"
+    (slide) => slide.position !== 1 && slide.slide_role !== "cta" && slide.visual_priority === "image"
   );
   const balanced = slides.filter(
-    (slide) => slide.slide_role !== "cta" && slide.visual_priority === "balanced"
+    (slide) => slide.position !== 1 && slide.slide_role !== "cta" && slide.visual_priority === "balanced"
   );
 
-  // Never force an AI image into a text-first slide. Text-led covers should stay typographic.
-  const selected = [...imageFirst, ...balanced]
+  // The cover gets a background asset, while internal slides get image-led support where useful.
+  const selected = [cover, ...imageFirst, ...balanced]
+    .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
     .filter((slide, index, array) => array.findIndex((item) => item.id === slide.id) === index)
     .slice(0, 3);
 
   const results = await Promise.allSettled(
     selected.map(async (slide) => {
+      const role = slide.slide_role || "body";
+      const placement =
+        slide.position === 1 || role === "hook" || role === "second_hook"
+          ? "background"
+          : slide.visual_priority === "image"
+            ? "hero"
+            : role === "item"
+              ? "side"
+              : "card";
+
       const prompt = buildSlideImagePrompt({
         brandName: brand.name,
         segment: brand.segment,
@@ -254,7 +275,8 @@ export async function generateCarouselVisuals(formData: FormData) {
         secondaryColor: guidelines?.secondary_color || null,
         headline: slide.headline,
         body: slide.body,
-        role: slide.slide_role || "body",
+        role,
+        placement,
       });
 
       const generated = await generateImage({
