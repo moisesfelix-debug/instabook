@@ -475,7 +475,7 @@ export function VisualCarousel({
         <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
         <div className={`visualCanvas proCanvas ${direction} role-${displayRole} priority-${current.visual_priority || "balanced"} ${activeImageUrl ? "hasHero" : ""}`}>
-          {activeImageUrl && current.visual_priority !== "text" && <div className="visualHeroLayer" style={heroStyle} />}
+          {activeImageUrl && (Boolean(current.image_url) || current.visual_priority !== "text") && <div className="visualHeroLayer" style={heroStyle} />}
           {current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
 
           <div className="visualTop">
