@@ -6,6 +6,7 @@
 - [x] Protótipo navegável inicial
 - [x] Repositório GitHub conectado
 - [x] Preview Vercel conectado ao repositório
+- [x] CI com typecheck + build
 
 ## Fase 1 — fundação funcional
 - [x] Projeto Next.js
@@ -16,27 +17,29 @@
 - [x] Autenticação Supabase SSR
 - [x] Cadastro/login/onboarding testados com usuário real
 - [x] Workspace e marca persistidos no banco
-- [x] Sidebar carregando usuário/workspace real
-- [x] Dashboard sem métricas/marcas fictícias
 - [x] CRUD real de marcas
 - [x] CRUD real de clientes
 - [x] Vínculo marca ↔ cliente protegido por tenant
+- [x] Memória ampliada da marca
 - [ ] Ajustar entregabilidade/branding do e-mail transacional
-- [ ] Identidade visual completa da marca persistida no banco
 
 ## Fase 2 — criação
-- [ ] Schema de conteúdos e versões
-- [ ] Geração estruturada com IA
-- [ ] Posts
-- [ ] Carrosséis
-- [ ] Roteiros de Reels
+- [x] Schema de conteúdos, slides e gerações
+- [x] Geração estruturada com IA — implementação
+- [x] Carrossel com 7 slides
+- [x] Post estático
+- [x] Roteiro de Reel
+- [x] Biblioteca ligada ao banco
+- [x] Editor textual de rascunho
+- [ ] Validar primeira chamada real do AI Gateway em produção
 - [ ] Templates visuais
 - [ ] Exportação 1080x1350 / 1080x1080
 
 ## Fase 3 — operação
-- [x] Biblioteca — interface
+- [x] Biblioteca — dados reais
 - [x] Calendário — interface
 - [x] Aprovação — interface
+- [ ] Agendamento real
 - [ ] Comentários
 - [x] Modo agência — estrutura de interface
 

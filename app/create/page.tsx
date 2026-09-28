@@ -1,10 +1,14 @@
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
+import { generateContent } from "./actions";
 
-const formats = ["Carrossel", "Post estático", "Roteiro de Reel"];
-const objectives = ["Educar", "Engajar", "Gerar leads", "Vender"];
-
-export default async function CreatePage() {
+export default async function CreatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const query = await searchParams;
   const { supabase, workspace } = await getWorkspaceContext();
   const { data: brands } = await supabase
     .from("brands")
@@ -12,33 +16,78 @@ export default async function CreatePage() {
     .eq("workspace_id", workspace.id)
     .order("created_at");
 
-  const firstBrand = brands?.[0]?.name || "Sua marca";
-
   return (
     <AppShell>
-      <header><div><h1>Criar conteúdo</h1><p>Transforme uma ideia em conteúdo alinhado à identidade da marca.</p></div></header>
-      <div className="creatorLayout">
-        <article className="panel creatorForm">
-          <span className="eyebrow">ASSISTENTE IA</span>
-          <h2>Conte o que você quer publicar</h2>
-          <label>Marca
-            <select>
-              {(brands || []).map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-              {(!brands || brands.length === 0) && <option>Cadastre uma marca primeiro</option>}
-            </select>
-          </label>
-          <label>Ideia ou briefing<textarea placeholder="Ex.: crie um carrossel sobre 5 erros que restaurantes cometem no Instagram."/></label>
-          <div className="choiceGroup"><span>Formato</span>{formats.map((x,i)=><button type="button" className={i===0?"choice activeChoice":"choice"} key={x}>{x}</button>)}</div>
-          <div className="choiceGroup"><span>Objetivo</span>{objectives.map((x,i)=><button type="button" className={i===0?"choice activeChoice":"choice"} key={x}>{x}</button>)}</div>
-          <button className="cta full" type="button">Gerar conteúdo ✦</button>
-          <p className="featureNote">A geração por IA será conectada na próxima etapa. A marca selecionada já vem do banco real.</p>
+      <header>
+        <div>
+          <h1>Criar conteúdo</h1>
+          <p>Briefing + identidade da marca + IA, salvo automaticamente como rascunho.</p>
+        </div>
+        <Link className="secondaryBtn" href="/library">Ver biblioteca</Link>
+      </header>
+
+      {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
+
+      {(!brands || brands.length === 0) ? (
+        <article className="panel emptyState">
+          <span className="emptyIcon">✦</span>
+          <h2>Cadastre uma marca antes de criar</h2>
+          <p>A IA usa a identidade da marca como contexto para gerar os conteúdos.</p>
+          <Link className="cta" href="/brands/new">Cadastrar marca</Link>
         </article>
-        <article className="panel previewPanel">
-          <div className="panelHead"><div><h2>Prévia</h2><p>Modelo de carrossel • 1080 × 1350</p></div><span className="draftBadge">Exemplo</span></div>
-          <div className="carouselPreview"><small>{firstBrand.toUpperCase()}</small><h3>Seu conteúdo gerado aparecerá aqui</h3><p>Briefing + identidade da marca + IA →</p><b>01/07</b></div>
-          <div className="slideStrip">{[1,2,3,4,5,6,7].map(n=><button type="button" className={n===1?"slide activeSlide":"slide"} key={n}>{n}</button>)}</div>
-        </article>
-      </div>
+      ) : (
+        <div className="creatorLayout">
+          <article className="panel creatorForm">
+            <span className="eyebrow">ASSISTENTE IA</span>
+            <h2>O que vamos criar?</h2>
+            <form action={generateContent}>
+              <label>Marca
+                <select name="brandId" required>
+                  {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+                </select>
+              </label>
+
+              <label>Ideia ou briefing
+                <textarea
+                  name="briefing"
+                  required
+                  minLength={8}
+                  placeholder="Ex.: crie um carrossel mostrando 5 erros que restaurantes cometem ao tentar vender pelo Instagram."
+                />
+              </label>
+
+              <fieldset className="radioGroup">
+                <legend>Formato</legend>
+                <label><input type="radio" name="type" value="carousel" defaultChecked /><span>Carrossel</span></label>
+                <label><input type="radio" name="type" value="post" /><span>Post estático</span></label>
+                <label><input type="radio" name="type" value="reel" /><span>Roteiro de Reel</span></label>
+              </fieldset>
+
+              <fieldset className="radioGroup">
+                <legend>Objetivo</legend>
+                <label><input type="radio" name="objective" value="educar" defaultChecked /><span>Educar</span></label>
+                <label><input type="radio" name="objective" value="engajar" /><span>Engajar</span></label>
+                <label><input type="radio" name="objective" value="leads" /><span>Gerar leads</span></label>
+                <label><input type="radio" name="objective" value="vender" /><span>Vender</span></label>
+              </fieldset>
+
+              <button className="cta full" type="submit">Gerar e salvar rascunho ✦</button>
+            </form>
+            <p className="featureNote">A primeira versão usa GPT-5.4 Mini via Vercel AI Gateway para equilibrar qualidade e custo.</p>
+          </article>
+
+          <article className="panel previewPanel generatorIntro">
+            <span className="eyebrow">COMO FUNCIONA</span>
+            <h2>A marca vira contexto, não só um nome.</h2>
+            <div className="generationFlow">
+              <div><span>1</span><b>Briefing</b><small>Você informa a ideia e objetivo.</small></div>
+              <div><span>2</span><b>Identidade</b><small>Público, tom, pilares, palavras e CTA entram no prompt.</small></div>
+              <div><span>3</span><b>IA</b><small>O conteúdo é gerado de forma estruturada.</small></div>
+              <div><span>4</span><b>Rascunho</b><small>Slides, legenda e roteiro ficam salvos para edição.</small></div>
+            </div>
+          </article>
+        </div>
+      )}
     </AppShell>
   );
 }

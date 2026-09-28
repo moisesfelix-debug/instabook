@@ -11,6 +11,30 @@ function cleanHandle(value: string) {
   return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
 }
 
+function listValue(formData: FormData, name: string) {
+  return String(formData.get(name) || "")
+    .split(/[,\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function guidelinePayload(formData: FormData, workspaceId: string, brandId: string) {
+  return {
+    brand_id: brandId,
+    workspace_id: workspaceId,
+    primary_color: String(formData.get("primaryColor") || "").trim() || null,
+    secondary_color: String(formData.get("secondaryColor") || "").trim() || null,
+    default_cta: String(formData.get("defaultCta") || "").trim() || null,
+    voice_notes: String(formData.get("voiceNotes") || "").trim() || null,
+    value_proposition: String(formData.get("valueProposition") || "").trim() || null,
+    visual_direction: String(formData.get("visualDirection") || "").trim() || null,
+    content_pillars: listValue(formData, "contentPillars"),
+    preferred_words: listValue(formData, "preferredWords"),
+    forbidden_words: listValue(formData, "forbiddenWords"),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 async function resolveClientId(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -59,20 +83,29 @@ export async function createBrand(formData: FormData) {
     clientId = client.id;
   }
 
-  const { error } = await supabase.from("brands").insert({
-    workspace_id: workspace.id,
-    client_id: clientId,
-    name: brandName,
-    segment: segment || null,
-    instagram_handle: instagramHandle,
-    audience: audience || null,
-    tone: tone || null,
-    website: website || null,
-  });
+  const { data: brand, error } = await supabase
+    .from("brands")
+    .insert({
+      workspace_id: workspace.id,
+      client_id: clientId,
+      name: brandName,
+      segment: segment || null,
+      instagram_handle: instagramHandle,
+      audience: audience || null,
+      tone: tone || null,
+      website: website || null,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !brand) {
     redirect("/brands/new?error=" + encodeURIComponent("Não foi possível cadastrar a marca."));
   }
+
+  await supabase.from("brand_guidelines").upsert(
+    guidelinePayload(formData, workspace.id, brand.id),
+    { onConflict: "brand_id" }
+  );
 
   revalidatePath("/");
   revalidatePath("/brands");
@@ -114,6 +147,11 @@ export async function updateBrand(formData: FormData) {
   if (error) {
     redirect(`/brands/${brandId}/edit?error=${encodeURIComponent("Não foi possível atualizar a marca.")}`);
   }
+
+  await supabase.from("brand_guidelines").upsert(
+    guidelinePayload(formData, workspace.id, brandId),
+    { onConflict: "brand_id" }
+  );
 
   revalidatePath("/");
   revalidatePath("/brands");

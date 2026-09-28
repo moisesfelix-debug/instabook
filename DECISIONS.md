@@ -24,3 +24,10 @@ The production Supabase project runs in sa-east-1 (São Paulo). Initial tenant d
 
 ## 2026-09-28 — Public Supabase settings can bootstrap the frontend
 The project URL and publishable key may be used client-side because authorization is enforced by RLS. Environment variables remain the preferred long-term configuration.
+
+
+## 2026-09-28 — AI content engine
+Content generation uses Vercel AI Gateway through the AI SDK so production can rely on Vercel OIDC instead of storing a provider API key. The initial model is openai/gpt-5.4-mini to balance quality, latency and cost. Generations are structured, persisted as editable drafts, and tied to workspace/brand/user for auditability.
+
+## 2026-09-28 — Brand memory before visual templates
+Brand strategy and voice are persisted before visual-template automation: audience, tone, value proposition, content pillars, preferred/forbidden vocabulary, CTA and visual direction. This context is injected into every generation.
