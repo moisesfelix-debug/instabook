@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 
-const MODEL = "inclusionai/ling-3.0-flash-sante-free";
+const MODEL = "openai/gpt-5.4-mini";
 
 const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
 const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);
