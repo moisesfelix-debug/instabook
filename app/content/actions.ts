@@ -72,3 +72,67 @@ export async function deleteContent(formData: FormData) {
   revalidatePath("/library");
   redirect("/library");
 }
+
+
+function imageExtension(file: File) {
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  return extensions[file.type] || null;
+}
+
+export async function uploadContentHero(formData: FormData) {
+  const contentId = String(formData.get("contentId") || "");
+  const file = formData.get("heroFile");
+
+  if (!contentId || !(file instanceof File) || file.size === 0) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Escolha uma imagem para o conteúdo.")}`);
+  }
+
+  const extension = imageExtension(file);
+  if (!extension || file.size > 8 * 1024 * 1024) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Use uma imagem JPG, PNG ou WebP de até 8 MB.")}`);
+  }
+
+  const { supabase, workspace } = await getWorkspaceContext();
+  const { data: content } = await supabase
+    .from("contents")
+    .select("id,hero_image_path")
+    .eq("id", contentId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+
+  if (!content) {
+    redirect("/library");
+  }
+
+  const path = `${workspace.id}/${contentId}/hero-${Date.now()}.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from("content-assets")
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não foi possível enviar a imagem.")}`);
+  }
+
+  const { error: saveError } = await supabase
+    .from("contents")
+    .update({ hero_image_path: path, updated_at: new Date().toISOString() })
+    .eq("id", contentId)
+    .eq("workspace_id", workspace.id);
+
+  if (saveError) {
+    await supabase.storage.from("content-assets").remove([path]);
+    redirect(`/content/${contentId}?error=${encodeURIComponent("A imagem foi enviada, mas não foi possível vinculá-la ao conteúdo.")}`);
+  }
+
+  if (content.hero_image_path && content.hero_image_path !== path) {
+    await supabase.storage.from("content-assets").remove([content.hero_image_path]);
+  }
+
+  revalidatePath("/library");
+  revalidatePath(`/content/${contentId}`);
+  redirect(`/content/${contentId}?asset=hero`);
+}

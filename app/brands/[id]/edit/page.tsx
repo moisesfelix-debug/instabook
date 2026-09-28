@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { updateBrand } from "@/app/brands/actions";
+import { updateBrand, uploadBrandLogo } from "@/app/brands/actions";
 import { SubmitButton } from "@/components/submit-button";
 
 function listToText(value: string[] | null | undefined) {
@@ -14,7 +14,7 @@ export default async function EditBrandPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; asset?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace } = await getWorkspaceContext();
@@ -33,13 +33,17 @@ export default async function EditBrandPage({
       .order("name"),
     supabase
       .from("brand_guidelines")
-      .select("primary_color,secondary_color,default_cta,voice_notes,preferred_words,forbidden_words,content_pillars,value_proposition,visual_direction")
+      .select("primary_color,secondary_color,default_cta,voice_notes,preferred_words,forbidden_words,content_pillars,value_proposition,visual_direction,logo_path")
       .eq("brand_id", id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
   ]);
 
   if (!brand) notFound();
+
+  const logoUrl = guidelines?.logo_path
+    ? supabase.storage.from("brand-assets").getPublicUrl(guidelines.logo_path).data.publicUrl
+    : null;
 
   return (
     <AppShell>
@@ -52,8 +56,26 @@ export default async function EditBrandPage({
         <Link className="secondaryBtn" href="/brands">← Voltar</Link>
       </header>
 
+      {query.asset === "logo" && <div className="formAlert successAlert pageAlert">Logo atualizado.</div>}
+      {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
+
+      <article className="panel assetPanel">
+        <div className="assetPreview logoAssetPreview" style={logoUrl ? { backgroundImage: `url("${logoUrl}")` } : undefined}>
+          {!logoUrl && <span>{brand.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>}
+        </div>
+        <div className="assetCopy">
+          <span className="eyebrow">LOGO DA MARCA</span>
+          <h2>{logoUrl ? "Logo conectado ao estúdio visual" : "Adicione o logo da marca"}</h2>
+          <p>PNG, JPG ou WebP de até 5 MB. O arquivo será usado automaticamente nas artes exportadas.</p>
+        </div>
+        <form className="assetUploadForm" action={uploadBrandLogo} encType="multipart/form-data">
+          <input type="hidden" name="brandId" value={brand.id} />
+          <input name="logoFile" type="file" accept="image/png,image/jpeg,image/webp" required />
+          <SubmitButton className="secondaryBtn" pendingLabel="Enviando logo...">{logoUrl ? "Trocar logo" : "Enviar logo"}</SubmitButton>
+        </form>
+      </article>
+
       <article className="panel brandFormPanel">
-        {query.error && <div className="formAlert errorAlert">{query.error}</div>}
         <form className="brandForm" action={updateBrand}>
           <input type="hidden" name="brandId" value={brand.id} />
 

@@ -209,3 +209,80 @@ export async function deleteAgencyClient(formData: FormData) {
 
   revalidatePath("/brands");
 }
+
+
+function imageExtension(file: File) {
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  return extensions[file.type] || null;
+}
+
+export async function uploadBrandLogo(formData: FormData) {
+  const brandId = String(formData.get("brandId") || "");
+  const file = formData.get("logoFile");
+
+  if (!brandId || !(file instanceof File) || file.size === 0) {
+    redirect(`/brands/${brandId}/edit?error=${encodeURIComponent("Escolha uma imagem para o logo.")}`);
+  }
+
+  const extension = imageExtension(file);
+  if (!extension || file.size > 5 * 1024 * 1024) {
+    redirect(`/brands/${brandId}/edit?error=${encodeURIComponent("Use um logo JPG, PNG ou WebP de até 5 MB.")}`);
+  }
+
+  const { supabase, workspace } = await getWorkspaceContext();
+
+  const [{ data: brand }, { data: currentGuidelines }] = await Promise.all([
+    supabase
+      .from("brands")
+      .select("id")
+      .eq("id", brandId)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("brand_guidelines")
+      .select("logo_path")
+      .eq("brand_id", brandId)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+  ]);
+
+  if (!brand) {
+    redirect("/brands?error=" + encodeURIComponent("Marca não encontrada."));
+  }
+
+  const path = `${workspace.id}/${brandId}/logo-${Date.now()}.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from("brand-assets")
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) {
+    redirect(`/brands/${brandId}/edit?error=${encodeURIComponent("Não foi possível enviar o logo.")}`);
+  }
+
+  const { error: saveError } = await supabase.from("brand_guidelines").upsert(
+    {
+      brand_id: brandId,
+      workspace_id: workspace.id,
+      logo_path: path,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "brand_id" }
+  );
+
+  if (saveError) {
+    await supabase.storage.from("brand-assets").remove([path]);
+    redirect(`/brands/${brandId}/edit?error=${encodeURIComponent("O logo foi enviado, mas não foi possível vinculá-lo à marca.")}`);
+  }
+
+  if (currentGuidelines?.logo_path && currentGuidelines.logo_path !== path) {
+    await supabase.storage.from("brand-assets").remove([currentGuidelines.logo_path]);
+  }
+
+  revalidatePath("/brands");
+  revalidatePath(`/brands/${brandId}/edit`);
+  redirect(`/brands/${brandId}/edit?asset=logo`);
+}

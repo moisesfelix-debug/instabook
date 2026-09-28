@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { deleteContent, updateContent } from "@/app/content/actions";
+import { deleteContent, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
 
@@ -21,7 +21,7 @@ export default async function ContentPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; asset?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace } = await getWorkspaceContext();
@@ -29,7 +29,7 @@ export default async function ContentPage({
   const [{ data: content }, { data: slides }] = await Promise.all([
     supabase
       .from("contents")
-      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at")
+      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at,hero_image_path")
       .eq("id", id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
@@ -52,11 +52,23 @@ export default async function ContentPage({
       .maybeSingle(),
     supabase
       .from("brand_guidelines")
-      .select("primary_color,secondary_color")
+      .select("primary_color,secondary_color,logo_path")
       .eq("brand_id", content.brand_id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
   ]);
+
+  const logoUrl = visualGuidelines?.logo_path
+    ? supabase.storage.from("brand-assets").getPublicUrl(visualGuidelines.logo_path).data.publicUrl
+    : null;
+
+  let heroImageUrl: string | null = null;
+  if (content.hero_image_path) {
+    const { data: signedImage } = await supabase.storage
+      .from("content-assets")
+      .createSignedUrl(content.hero_image_path, 60 * 60 * 6);
+    heroImageUrl = signedImage?.signedUrl || null;
+  }
 
   return (
     <AppShell>
@@ -70,12 +82,37 @@ export default async function ContentPage({
       </header>
 
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
+      {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
+      {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
+
+      {(slides || []).length > 0 && (
+        <article className="panel assetPanel contentAssetPanel">
+          <div
+            className="assetPreview contentAssetPreview"
+            style={heroImageUrl ? { backgroundImage: `url("${heroImageUrl}")` } : undefined}
+          >
+            {!heroImageUrl && <span>IMG</span>}
+          </div>
+          <div className="assetCopy">
+            <span className="eyebrow">IMAGEM DO CONTEÚDO</span>
+            <h2>{heroImageUrl ? "Imagem conectada aos templates" : "Adicione uma foto de apoio"}</h2>
+            <p>Use uma foto do produto, ambiente, pessoa ou campanha. Ela permanece privada e entra no preview e no PNG.</p>
+          </div>
+          <form className="assetUploadForm" action={uploadContentHero} encType="multipart/form-data">
+            <input type="hidden" name="contentId" value={content.id} />
+            <input name="heroFile" type="file" accept="image/png,image/jpeg,image/webp" required />
+            <SubmitButton className="secondaryBtn" pendingLabel="Enviando imagem...">{heroImageUrl ? "Trocar imagem" : "Enviar imagem"}</SubmitButton>
+          </form>
+        </article>
+      )}
 
       {(slides || []).length > 0 && (
         <VisualCarousel
           brandName={brand?.name || "Marca"}
           primaryColor={visualGuidelines?.primary_color}
           secondaryColor={visualGuidelines?.secondary_color}
+          logoUrl={logoUrl}
+          heroImageUrl={heroImageUrl}
           slides={slides || []}
         />
       )}
