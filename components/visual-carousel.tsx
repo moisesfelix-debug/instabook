@@ -55,21 +55,50 @@ function normalizeCopy(value?: string | null) {
     .trim();
 }
 
-function visibleHighlight(slide: VisualSlide, role: SlideRole) {
+function visibleHighlight(slide: VisualSlide) {
   const highlight = normalizeCopy(slide.highlight);
   const headline = normalizeCopy(slide.headline);
   if (!highlight) return null;
 
-  // Avoid the common AI pattern "5 erros" + "5 erros que..." appearing twice.
-  if (
-    headline === highlight ||
-    headline.startsWith(highlight + " ") ||
-    ((role === "hook" || role === "second_hook") && headline.includes(highlight))
-  ) {
-    return null;
-  }
+  // If the same idea already exists in the headline, don't create a second headline.
+  if (headline === highlight || headline.includes(highlight)) return null;
 
   return slide.highlight;
+}
+
+function displayHeadline(slide: VisualSlide, role: SlideRole) {
+  const value = (slide.headline || "").trim();
+  if (role !== "item") return value;
+
+  // Badge already communicates "ERRO 01", "PASSO 02", etc. Keep the actual idea as headline.
+  if (slide.badge) {
+    return value
+      .replace(/^(erro|passo|dica|item|etapa)\s*0*\d+\s*[:\-–—]?\s*/i, "")
+      .trim() || value;
+  }
+
+  return value;
+}
+
+function badgeCarriesNumber(badge?: string | null) {
+  return /\d/.test(badge || "");
+}
+
+type ImagePlacement = "none" | "background" | "side" | "card" | "hero";
+
+function imagePlacement(
+  slide: VisualSlide,
+  role: SlideRole,
+  archetype: Archetype,
+  style: VisualStyle
+): ImagePlacement {
+  if (!slide.image_url) return "none";
+  if (role === "comparison" || role === "cta") return "none";
+  if (role === "hook" || role === "second_hook") return "background";
+  if (archetype === "product" || style === "sensory_product" || slide.visual_priority === "image") return "hero";
+  if (role === "item") return style === "clean_consulting" ? "card" : "side";
+  if (role === "proof" || role === "result") return "background";
+  return slide.visual_priority === "balanced" ? "side" : "background";
 }
 
 const archetypeLabels: Record<Archetype, string> = {
@@ -294,17 +323,16 @@ export function VisualCarousel({
     canvas.width = 1080;
     canvas.height = 1350;
 
-    const activeImageUrl =
-      current.visual_priority === "text" ? null : current.image_url || heroImageUrl;
+    const activeImageUrl = current.image_url || (current.visual_priority !== "text" ? heroImageUrl : null);
     const [hero, logo] = await Promise.all([loadBitmap(activeImageUrl), loadBitmap(logoUrl)]);
-    const headline = current.headline || "";
+    const headline = displayHeadline(current, slideRole);
     const body = current.body || "";
     const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
     const number = String(current.position).padStart(2, "0");
     const total = String(slides.length).padStart(2, "0");
     const brandInitials = initials(brandName);
     const badge = current.badge || roleLabels[slideRole];
-    const highlight = visibleHighlight(current, slideRole);
+    const highlight = visibleHighlight(current);
 
     ctx.textBaseline = "top";
 
@@ -376,22 +404,28 @@ export function VisualCarousel({
         fillWrapped(ctx, body, 78, y + lines * 98 + 28, 900, 45, 4);
       }
     } else if (slideRole === "item") {
-      ctx.fillStyle = primary;
-      ctx.beginPath();
-      ctx.arc(160, 585, 78, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.font = "900 58px Arial";
-      ctx.fillText(number, 160, 552);
-      ctx.textAlign = "left";
+      const hasNumberBadge = badgeCarriesNumber(current.badge);
+      const textX = hasNumberBadge ? 78 : 280;
+      const textWidth = hasNumberBadge ? 900 : 690;
+
+      if (!hasNumberBadge) {
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.arc(160, 585, 78, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "900 58px Arial";
+        ctx.fillText(number, 160, 552);
+        ctx.textAlign = "left";
+      }
 
       ctx.fillStyle = mainText;
       ctx.font = "900 66px Arial";
-      const lines = fillWrapped(ctx, headline, 280, 500, 690, 77, 4);
+      const lines = fillWrapped(ctx, headline, textX, 500, textWidth, 77, 4);
       ctx.fillStyle = softText;
       ctx.font = "400 31px Arial";
-      fillWrapped(ctx, body, 280, 520 + lines * 77, 690, 43, 6);
+      fillWrapped(ctx, body, textX, 520 + lines * 77, textWidth, 43, 6);
     } else if (slideRole === "comparison") {
       const leftTitle = headline || "Antes";
       const rightTitle = current.secondary_headline || current.highlight || "Depois";
@@ -483,12 +517,15 @@ export function VisualCarousel({
     }
   }
 
+  const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
+  const placement = imagePlacement(current, displayRole, archetype, style);
   const activeImageUrl =
-    current.visual_priority === "text" ? null : current.image_url || heroImageUrl;
+    current.image_url || (current.visual_priority !== "text" ? heroImageUrl : null);
   const heroStyle = activeImageUrl ? ({ backgroundImage: `url("${activeImageUrl}")` } as CSSProperties) : undefined;
   const logoStyle = logoUrl ? ({ backgroundImage: `url("${logoUrl}")` } as CSSProperties) : undefined;
-  const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
-  const displayHighlight = visibleHighlight(current, displayRole);
+  const displayHighlight = visibleHighlight(current);
+  const cleanHeadline = displayHeadline(current, displayRole);
+  const showItemNumber = displayRole === "item" && !badgeCarriesNumber(current.badge);
 
   return (
     <article className="panel visualStudio professionalStudio" style={cssVars}>
@@ -549,9 +586,9 @@ export function VisualCarousel({
       <div className="visualWorkspace">
         <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
-        <div className={`visualCanvas proCanvas ${direction} style-${style} role-${displayRole} priority-${current.visual_priority || "balanced"} ${activeImageUrl ? "hasHero" : ""}`}>
-          {activeImageUrl && <div className="visualHeroLayer" style={heroStyle} />}
-          {activeImageUrl && current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
+        <div className={`visualCanvas proCanvas ${direction} style-${style} role-${displayRole} priority-${current.visual_priority || "balanced"} image-${placement} ${activeImageUrl && placement !== "none" ? "hasHero" : ""}`}>
+          {activeImageUrl && placement !== "none" && <div className="visualHeroLayer" style={heroStyle} />}
+          {activeImageUrl && placement !== "none" && current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
 
           <div className="visualTop">
             <span className="visualBrandName">
@@ -577,8 +614,8 @@ export function VisualCarousel({
           ) : (
             <div className="visualCopy roleAwareCopy">
               {displayHighlight && <strong className="visualHighlight">{displayHighlight}</strong>}
-              {displayRole === "item" && <span className="itemNumber">{String(current.position - 2).padStart(2, "0")}</span>}
-              <h3>{current.headline}</h3>
+              {showItemNumber && <span className="itemNumber">{String(current.position - 2).padStart(2, "0")}</span>}
+              <h3>{cleanHeadline}</h3>
               {current.body && <p>{current.body}</p>}
               {displayRole === "cta" && <span className="ctaVisual">Continue →</span>}
             </div>
