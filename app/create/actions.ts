@@ -6,17 +6,31 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { generateAndStoreVisuals, type VisualSlideInput } from "@/lib/visual-generation";
-import { isVisualFamily, suggestedVisualFamily, visualFamilyById, type VisualFamily } from "@/lib/visual-families";
+import { isVisualFamily, visualFamilyById, type VisualFamily } from "@/lib/visual-families";
+import {
+  blueprintPrompt,
+  buildContentBlueprint,
+  chooseArtDirection,
+  chooseVisualFamily,
+  inferArchetypeFromBriefing,
+  stripChecklistPrefix,
+  type ArtDirection,
+  type ContentArchetype,
+  type ContentBlueprint,
+} from "@/lib/content-blueprints";
 
 const MODEL = "openai/gpt-5.4-mini";
 
 const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
 const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);
-const visualStyleSchema = z.enum(["bold_performance", "clean_consulting", "human_editorial", "zine_collage", "sensory_product"]);
-const visualFamilySchema = z.enum(["pulse", "atlas", "margem", "orbit", "vitrine"]);
-const slideRoleSchema = z.enum(["hook", "second_hook", "context", "item", "comparison", "proof", "transition", "result", "takeaway", "cta", "body"]);
-const emphasisSchema = z.enum(["high", "medium", "low"]);
-const visualPrioritySchema = z.enum(["text", "image", "balanced"]);
+
+const generatedSlideSchema = z.object({
+  headline: z.string().min(2).max(140),
+  body: z.string().max(600).nullable().optional(),
+  highlight: z.string().max(90).nullable().optional(),
+  secondaryHeadline: z.string().max(140).nullable().optional(),
+  secondaryBody: z.string().max(400).nullable().optional(),
+});
 
 const generatedContentSchema = z.object({
   title: z.string().min(3).max(120),
@@ -24,32 +38,10 @@ const generatedContentSchema = z.object({
   caption: z.string().max(2200),
   cta: z.string().max(300),
   hashtags: z.array(z.string()).max(12),
-  reelScript: z.string().max(4000),
-  contentArchetype: archetypeSchema.optional(),
-  artDirection: artDirectionSchema.optional(),
-  visualStyle: visualStyleSchema.optional(),
-  visualFamily: visualFamilySchema.optional(),
-  slides: z.array(
-    z.object({
-      headline: z.string().max(140),
-      body: z.string().max(600).nullable().optional(),
-      role: slideRoleSchema.optional(),
-      emphasis: emphasisSchema.optional(),
-      visualPriority: visualPrioritySchema.optional(),
-      badge: z.string().max(50).nullable().optional(),
-      highlight: z.string().max(90).nullable().optional(),
-      secondaryHeadline: z.string().max(140).nullable().optional(),
-      secondaryBody: z.string().max(400).nullable().optional(),
-    })
-  ).max(10),
+  reelScript: z.string().max(4000).nullable().optional(),
+  slides: z.array(generatedSlideSchema).max(12),
 });
 
-type Archetype = z.infer<typeof archetypeSchema>;
-type ArtDirection = z.infer<typeof artDirectionSchema>;
-type VisualStyle = z.infer<typeof visualStyleSchema>;
-type SlideRole = z.infer<typeof slideRoleSchema>;
-type Emphasis = z.infer<typeof emphasisSchema>;
-type VisualPriority = z.infer<typeof visualPrioritySchema>;
 type Generated = z.infer<typeof generatedContentSchema>;
 
 function fail(message: string): never {
@@ -59,8 +51,8 @@ function fail(message: string): never {
 function parseGeneratedContent(text: string) {
   const cleaned = text
     .trim()
-    .replace(/^\`\`\`(?:json)?\s*/i, "")
-    .replace(/\s*\`\`\`$/i, "");
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
 
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
@@ -72,120 +64,207 @@ function parseGeneratedContent(text: string) {
   return generatedContentSchema.parse(JSON.parse(cleaned.slice(start, end + 1)));
 }
 
-function inferArchetype(briefing: string, title: string): Archetype {
-  const source = (briefing + " " + title).toLowerCase();
-
-  if (/\b(antes|depois|versus|vs\.?|compar|mito|verdade|errado|certo)\b/.test(source)) return "comparison";
-  if (/\b(case|história|historia|jornada|como .* conseguiu|bastidor)\b/.test(source)) return "story";
-  if (/\b(produto|prato|restaurante|ambiente|lançamento|lancamento|showcase|cardápio|cardapio)\b/.test(source)) return "product";
-  if (/\b(dado|dados|estatística|estatistica|pesquisa|estudo|número|numero|insight|tendência|tendencia)\b/.test(source)) return "authority";
-  if (/\b(\d+\s+(erros|passos|dicas|formas|maneiras|motivos|ideias|sinais)|checklist|lista|erros|passos|dicas)\b/.test(source)) return "checklist";
-
-  return "general";
+function plain(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function suggestedDirection(archetype: Archetype): ArtDirection {
-  if (archetype === "comparison" || archetype === "product") return "split";
-  if (archetype === "authority") return "minimal";
-  return "editorial";
+function hashtagSlug(value: string) {
+  return plain(value).replace(/\s+/g, "");
 }
 
-function fallbackRole(archetype: Archetype, position: number, total: number): SlideRole {
-  if (position === 1) return "hook";
-  if (position === total) return "cta";
+function editDistance(a: string, b: string) {
+  const rows = Array.from({ length: a.length + 1 }, () =>
+    Array.from({ length: b.length + 1 }, () => 0)
+  );
 
-  if (archetype === "checklist") {
-    if (position === 2) return "second_hook";
-    return "item";
+  for (let i = 0; i <= a.length; i += 1) rows[i][0] = i;
+  for (let j = 0; j <= b.length; j += 1) rows[0][j] = j;
+
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      rows[i][j] = Math.min(
+        rows[i - 1][j] + 1,
+        rows[i][j - 1] + 1,
+        rows[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
   }
 
-  if (archetype === "story") {
-    if (position === 2) return "context";
-    if (position === 4) return "transition";
-    if (position === 5) return "result";
-    if (position === 6) return "takeaway";
-    return "body";
-  }
-
-  if (archetype === "comparison") {
-    if (position === 2) return "second_hook";
-    return "comparison";
-  }
-
-  if (archetype === "product") {
-    if (position === 2) return "context";
-    if (position === total - 1) return "proof";
-    return "item";
-  }
-
-  if (archetype === "authority") {
-    if (position === 2) return "context";
-    if (position <= total - 2) return "proof";
-    return "takeaway";
-  }
-
-  return position === 2 ? "context" : "body";
+  return rows[a.length][b.length];
 }
 
-function fallbackEmphasis(role: SlideRole): Emphasis {
-  if (["hook", "second_hook", "proof", "result", "cta"].includes(role)) return "high";
-  if (["context", "takeaway", "transition"].includes(role)) return "medium";
-  return "medium";
+function normalizeHashtags(values: string[], brandName: string) {
+  const canonicalBrand = hashtagSlug(brandName);
+  const unique = new Set<string>();
+
+  for (const raw of values) {
+    const tag = hashtagSlug(raw.replace(/^#+/, ""));
+    if (!tag || tag.length < 3) continue;
+
+    // Remove near-miss spellings of the brand; the canonical form is appended below.
+    if (
+      canonicalBrand &&
+      tag !== canonicalBrand &&
+      Math.abs(tag.length - canonicalBrand.length) <= 2 &&
+      editDistance(tag, canonicalBrand) <= 2
+    ) {
+      continue;
+    }
+
+    unique.add(tag);
+  }
+
+  if (canonicalBrand) unique.add(canonicalBrand);
+  return Array.from(unique).slice(0, 12);
 }
 
-function fallbackVisualPriority(archetype: Archetype, role: SlideRole): VisualPriority {
-  if (archetype === "product") return role === "cta" ? "balanced" : "image";
-  if (role === "hook") return "balanced";
-  if (["proof", "comparison", "result"].includes(role)) return "balanced";
-  return "text";
-}
-
-function normalizeGenerated(
+function validateGenerated(
   generated: Generated,
-  briefing: string,
-  requested: {
-    archetype: Archetype | null;
-    artDirection: ArtDirection | null;
-    visualFamily: VisualFamily | null;
-  }
+  type: string,
+  blueprint: ContentBlueprint
 ) {
-  const archetype =
-    requested.archetype || generated.contentArchetype || inferArchetype(briefing, generated.title);
-  const visualFamily =
-    requested.visualFamily || generated.visualFamily || suggestedVisualFamily(archetype);
+  const errors: string[] = [];
+
+  if (type === "reel") {
+    if (generated.slides.length !== 0) errors.push("Reel deve retornar slides vazio.");
+    if (!generated.reelScript?.trim()) errors.push("Reel precisa de reelScript.");
+    return errors;
+  }
+
+  if (generated.slides.length !== blueprint.slots.length) {
+    errors.push(
+      `Esperados ${blueprint.slots.length} slides na ordem do blueprint; recebidos ${generated.slides.length}.`
+    );
+    return errors;
+  }
+
+  const normalizedHeadlines = generated.slides.map((slide) => plain(slide.headline));
+  if (new Set(normalizedHeadlines).size !== normalizedHeadlines.length) {
+    errors.push("Existem headlines repetidas.");
+  }
+
+  blueprint.slots.forEach((slot, index) => {
+    const slide = generated.slides[index];
+    if (!slide) return;
+
+    if (slot.role === "comparison") {
+      if (!slide.secondaryHeadline?.trim() || !slide.secondaryBody?.trim()) {
+        errors.push(`Slide ${index + 1} de comparação precisa dos dois lados preenchidos.`);
+      }
+    }
+
+    if (slot.role === "cta") {
+      const headline = plain(slide.headline);
+      if (/^(erro|passo|dica|item|sinal|motivo|ideia)\s*\d+/.test(headline)) {
+        errors.push("O CTA final está introduzindo mais um item da lista.");
+      }
+    }
+  });
+
+  if (blueprint.promisedItemCount) {
+    const count = blueprint.promisedItemCount;
+    const titleNumber = generated.title.match(/\b(\d{1,2})\b/);
+    if (titleNumber && Number(titleNumber[1]) !== count) {
+      errors.push(`O título promete ${titleNumber[1]} itens, mas o blueprint exige ${count}.`);
+    }
+  }
+
+  return errors;
+}
+
+function normalizeGenerated({
+  generated,
+  blueprint,
+  archetype,
+  artDirection,
+  visualFamily,
+  type,
+  brandName,
+}: {
+  generated: Generated;
+  blueprint: ContentBlueprint;
+  archetype: ContentArchetype;
+  artDirection: ArtDirection;
+  visualFamily: VisualFamily;
+  type: string;
+  brandName: string;
+}) {
   const family = visualFamilyById(visualFamily);
-  const artDirection =
-    requested.artDirection || generated.artDirection || suggestedDirection(archetype);
-  const visualStyle: VisualStyle = family.internalStyle;
-  const total = generated.slides.length;
 
   return {
-    ...generated,
+    title: generated.title.trim(),
+    hook: generated.hook.trim(),
+    caption: generated.caption.trim(),
+    cta: generated.cta.trim(),
+    hashtags: normalizeHashtags(generated.hashtags, brandName),
+    reelScript: type === "reel" ? generated.reelScript?.trim() || "" : "",
     contentArchetype: archetype,
     artDirection,
     visualFamily,
-    visualStyle,
-    slides: generated.slides.map((slide, index) => {
-      const position = index + 1;
-      const role: SlideRole =
-        position === 1
-          ? "hook"
-          : position === total && total > 1
-            ? "cta"
-            : slide.role || fallbackRole(archetype, position, total);
+    visualStyle: family.internalStyle,
+    blueprintId: blueprint.id,
+    slides:
+      type === "reel"
+        ? []
+        : blueprint.slots.map((slot, index) => {
+            const source = generated.slides[index];
+            let headline = source.headline.trim();
 
-      return {
-        ...slide,
-        role,
-        emphasis: slide.emphasis || fallbackEmphasis(role),
-        visualPriority: slide.visualPriority || fallbackVisualPriority(archetype, role),
-        badge: slide.badge || null,
-        highlight: slide.highlight || null,
-        secondaryHeadline: slide.secondaryHeadline || null,
-        secondaryBody: slide.secondaryBody || null,
-      };
-    }),
+            if (archetype === "checklist" && slot.role === "item") {
+              headline = stripChecklistPrefix(headline);
+            }
+
+            return {
+              headline,
+              body: source.body?.trim() || null,
+              role: slot.role,
+              emphasis: slot.emphasis,
+              visualPriority: slot.visualPriority,
+              badge: slot.badge,
+              highlight: source.highlight?.trim() || null,
+              secondaryHeadline: source.secondaryHeadline?.trim() || null,
+              secondaryBody: source.secondaryBody?.trim() || null,
+            };
+          }),
   };
+}
+
+function responseShape(type: string) {
+  if (type === "reel") {
+    return `{
+  "title": "string",
+  "hook": "string",
+  "caption": "string",
+  "cta": "string",
+  "hashtags": ["string"],
+  "reelScript": "roteiro completo",
+  "slides": []
+}`;
+  }
+
+  return `{
+  "title": "string",
+  "hook": "string",
+  "caption": "string",
+  "cta": "string",
+  "hashtags": ["string"],
+  "reelScript": "",
+  "slides": [
+    {
+      "headline": "string",
+      "body": "string ou null",
+      "highlight": "string curto ou null",
+      "secondaryHeadline": "string ou null",
+      "secondaryBody": "string ou null"
+    }
+  ]
+}`;
 }
 
 export async function generateContent(formData: FormData) {
@@ -200,9 +279,9 @@ export async function generateContent(formData: FormData) {
   const parsedArchetype = archetypeSchema.safeParse(archetypeInput);
   const parsedArtDirection = artDirectionSchema.safeParse(artDirectionInput);
 
-  const requestedArchetype =
+  const requestedArchetype: ContentArchetype | null =
     archetypeInput === "auto" ? null : parsedArchetype.success ? parsedArchetype.data : null;
-  const requestedArtDirection =
+  const requestedArtDirection: ArtDirection | null =
     artDirectionInput === "auto" ? null : parsedArtDirection.success ? parsedArtDirection.data : null;
   const requestedVisualFamily: VisualFamily | null =
     visualFamilyInput === "auto" ? null : isVisualFamily(visualFamilyInput) ? visualFamilyInput : null;
@@ -236,15 +315,28 @@ export async function generateContent(formData: FormData) {
     fail("A marca selecionada não pertence a este workspace.");
   }
 
+  // Resolve creative strategy before asking the model to write anything.
+  const archetype =
+    requestedArchetype || inferArchetypeFromBriefing(briefing);
+  const visualFamily =
+    requestedVisualFamily ||
+    chooseVisualFamily({
+      archetype,
+      objective,
+      briefing,
+      segment: brand.segment,
+    });
+  const artDirection =
+    requestedArtDirection || chooseArtDirection(archetype, visualFamily);
+  const blueprint = buildContentBlueprint(type, archetype, briefing);
+
   const formatInstruction =
-    type === "carousel"
-      ? "Crie exatamente 7 slides. Os 7 slides precisam formar uma narrativa visual: não repita a mesma função em todos."
-      : type === "post"
-        ? "Crie exatamente 1 slide com função hook e uma ideia visual/textual forte."
-        : "Não crie slides. O campo slides deve ser um array vazio. Entregue um roteiro de Reel claro, gravável e dividido em abertura, desenvolvimento e CTA.";
+    type === "reel"
+      ? "Este pedido é um Reel. Não gere slides; concentre-se no roteiro."
+      : `Este pedido usa um blueprint fechado de ${blueprint.slots.length} slide(s). Gere exatamente essa quantidade, na ordem indicada. Não invente slides extras e não mude a função de nenhum slot.`;
 
   const prompt = `
-Crie conteúdo para Instagram em português do Brasil com padrão de direção criativa profissional.
+Crie conteúdo para Instagram em português do Brasil com padrão profissional de direção criativa.
 
 MARCA
 Nome: ${brand.name}
@@ -264,112 +356,81 @@ Formato: ${type}
 Objetivo: ${objective}
 Briefing: ${briefing}
 
-DECISÕES DO USUÁRIO
-Arquétipo solicitado: ${requestedArchetype || "IA escolhe"}
-Direção estrutural solicitada: ${requestedArtDirection || "IA escolhe"}
-Família visual solicitada: ${requestedVisualFamily || "IA escolhe"}
+DECISÕES JÁ TOMADAS PELO DIRETOR CRIATIVO
+Arquétipo: ${archetype}
+Família visual: ${visualFamily}
+Direção estrutural: ${artDirection}
+Blueprint: ${blueprint.id}
 
-Se o usuário escolheu um valor específico acima, RESPEITE-O. Só escolha livremente quando estiver "IA escolhe".
+IMPORTANTE
+Você NÃO deve escolher arquétipo, família, direção, papéis de slide, badges, ênfase ou prioridade visual.
+Essas decisões já foram tomadas pelo sistema. Sua função é escrever a melhor copy possível para cada slot.
 
-ESCOLHA UM ARQUÉTIPO
-- checklist: listas, erros, passos, dicas, frameworks e sequências práticas.
-- story: case, jornada, problema → tensão → virada → solução → resultado.
-- comparison: antes/depois, errado/certo, mito/verdade, A versus B.
-- product: produto, serviço, ambiente, showcase ou conteúdo em que a fotografia deve protagonizar.
-- authority: dados, pesquisas, tendências, análise e conteúdo de autoridade.
-- general: quando nenhum dos anteriores se encaixar bem.
+BLUEPRINT OBRIGATÓRIO
+${blueprintPrompt(blueprint)}
 
-DIREÇÃO DE ARTE
-Escolha uma entre editorial, split ou minimal.
-- editorial: impacto, headline forte e narrativa.
-- split: contraste, comparação, imagem + texto.
-- minimal: informação premium, dados, respiro e sofisticação.
-
-FAMÍLIAS VISUAIS
-Escolha uma família visual autoral:
-- pulse: energia, contraste, assimetria, headline forte, recortes gráficos e ritmo de campanha.
-- atlas: grid disciplinado, sofisticação editorial, autoridade, respiro, regras finas e acabamento premium.
-- margem: textura, papel, anotações, colagem sutil, linguagem humana e sensação autoral.
-- orbit: composição modular, geometria digital, contraste escuro/claro, precisão e estética tecnológica premium.
-- vitrine: imagem protagonista, desejo visual, acabamento de campanha, produto/ambiente e overlays elegantes.
-
-A família visual é uma decisão estrutural. Ela deve influenciar o tamanho das headlines, densidade de texto, uso de imagem, badges e ritmo do carrossel.
-
-PAPÉIS DOS SLIDES
-Use apenas: hook, second_hook, context, item, comparison, proof, transition, result, takeaway, cta, body.
-O slide 1 deve ser hook. Em carrossel, o último deve ser cta.
-O slide 2 deve ser forte o suficiente para funcionar como uma segunda entrada no conteúdo.
-
-CAMPOS VISUAIS
-- badge: rótulo curto, ex.: "ERRO 01", "ANTES", "DADO", "PASSO 2".
-- highlight: palavra, número ou pequena frase que merece protagonismo visual. Não invente números.
-- secondaryHeadline/secondaryBody: use principalmente em slides comparison para criar os dois lados da comparação.
-- emphasis: high, medium ou low.
-- visualPriority: text, image ou balanced.
-
-REGRAS
-- Não invente dados, números, depoimentos, pesquisas ou resultados específicos que não estejam no briefing.
-- Se o conteúdo pedir autoridade mas não fornecer números confiáveis, use ideias e conceitos, não estatísticas inventadas.
-- Evite clichês e linguagem genérica de IA.
-- Cada slide deve acrescentar algo novo.
-- Headlines devem ser curtas o suficiente para uma arte de Instagram.
-- Evite parágrafos longos nos slides; detalhes adicionais podem ir para a legenda.
-- A legenda deve complementar o criativo, não apenas repetir os slides.
-- Hashtags devem ser específicas e sem "#".
+REGRAS DE COPY
+- Cada slide deve acrescentar uma ideia nova.
+- Nunca repita a mesma headline em dois slides.
+- Se um badge do blueprint já contém "ERRO 01", "PASSO 01" etc., não escreva esse rótulo novamente na headline.
+- O último slide CTA deve ser fechamento. Não use o CTA para introduzir outro erro, passo, dica, comparação ou evidência.
+- Headlines precisam ser curtas o suficiente para uma arte 4:5.
+- Body deve ser curto; detalhes adicionais ficam na legenda.
+- highlight é opcional e deve complementar, não repetir literalmente a headline.
+- Em slots comparison, secondaryHeadline e secondaryBody são obrigatórios e representam o segundo lado.
+- Não invente dados, números, pesquisas, depoimentos ou resultados.
+- A legenda complementa o criativo e não repete os slides.
+- Hashtags devem ser específicas, sem "#". Escreva o nome da marca corretamente: ${brand.name}.
 - ${formatInstruction}
+- Para ${type === "reel" ? "Reel" : "post/carrossel"}, o campo reelScript deve ser ${type === "reel" ? "preenchido" : 'uma string vazia ""'}.
 
-RESPONDA SOMENTE COM JSON VÁLIDO, sem markdown, sem comentários e sem texto fora do JSON.
-Use exatamente estas chaves:
-{
-  "title": "string",
-  "hook": "string",
-  "caption": "string",
-  "cta": "string",
-  "hashtags": ["string"],
-  "reelScript": "string",
-  "contentArchetype": "checklist|story|comparison|product|authority|general",
-  "artDirection": "editorial|split|minimal",
-  "visualFamily": "pulse|atlas|margem|orbit|vitrine",
-  "slides": [
-    {
-      "headline": "string",
-      "body": "string",
-      "role": "hook|second_hook|context|item|comparison|proof|transition|result|takeaway|cta|body",
-      "emphasis": "high|medium|low",
-      "visualPriority": "text|image|balanced",
-      "badge": "string ou null",
-      "highlight": "string ou null",
-      "secondaryHeadline": "string ou null",
-      "secondaryBody": "string ou null"
-    }
-  ]
-}
+RESPONDA SOMENTE COM JSON VÁLIDO, sem markdown, comentários ou texto fora do JSON.
+Use exatamente este formato:
+${responseShape(type)}
 `.trim();
 
-  let generated: ReturnType<typeof normalizeGenerated>;
+  let parsed: Generated;
 
   try {
-    const result = await generateText({
+    const first = await generateText({
       model: MODEL,
       prompt,
       maxOutputTokens: 5000,
     });
 
-    const parsed = parseGeneratedContent(result.text);
-    generated = normalizeGenerated(parsed, briefing, {
-      archetype: requestedArchetype,
-      artDirection: requestedArtDirection,
-      visualFamily: requestedVisualFamily,
-    });
+    parsed = parseGeneratedContent(first.text);
+    let validationErrors = validateGenerated(parsed, type, blueprint);
 
-    if (type === "carousel" && generated.slides.length !== 7) {
-      throw new Error(`Expected 7 slides, received ${generated.slides.length}`);
-    }
-    if (type === "post" && generated.slides.length !== 1) {
-      throw new Error(`Expected 1 slide, received ${generated.slides.length}`);
-    }
-    if (type === "reel" && generated.slides.length !== 0) {
-      throw new Error(`Expected no slides, received ${generated.slides.length}`);
+    if (validationErrors.length > 0) {
+      const repairPrompt = `
+A resposta abaixo não respeitou um blueprint obrigatório.
+
+ERROS DETECTADOS PELO VALIDADOR
+- ${validationErrors.join("\n- ")}
+
+BLUEPRINT
+${blueprintPrompt(blueprint)}
+
+RESPOSTA ANTERIOR
+${JSON.stringify(parsed)}
+
+Reescreva TODO o JSON corrigindo os problemas. Não acrescente explicações.
+Use exatamente este formato:
+${responseShape(type)}
+`.trim();
+
+      const repaired = await generateText({
+        model: MODEL,
+        prompt: repairPrompt,
+        maxOutputTokens: 5000,
+      });
+
+      parsed = parseGeneratedContent(repaired.text);
+      validationErrors = validateGenerated(parsed, type, blueprint);
+
+      if (validationErrors.length > 0) {
+        throw new Error("Blueprint validation failed after repair: " + validationErrors.join(" | "));
+      }
     }
   } catch (error) {
     console.error("instabook.ai_generation_failed", error);
@@ -386,8 +447,18 @@ Use exatamente estas chaves:
       fail("O modelo configurado não está liberado no plano gratuito do AI Gateway.");
     }
 
-    fail("A IA não conseguiu gerar o conteúdo agora. Tente novamente em instantes.");
+    fail("A IA não conseguiu gerar um conteúdo válido agora. Tente novamente em instantes.");
   }
+
+  const generated = normalizeGenerated({
+    generated: parsed,
+    blueprint,
+    archetype,
+    artDirection,
+    visualFamily,
+    type,
+    brandName: brand.name,
+  });
 
   const { data: content, error: contentError } = await supabase
     .from("contents")
@@ -428,7 +499,7 @@ Use exatamente estas chaves:
           workspace_id: workspace.id,
           position: index + 1,
           headline: slide.headline,
-          body: slide.body || null,
+          body: slide.body,
           slide_role: slide.role,
           emphasis: slide.emphasis,
           visual_priority: slide.visualPriority,
@@ -455,7 +526,14 @@ Use exatamente estas chaves:
     user_id: user.id,
     model: MODEL,
     prompt,
-    result_json: generated,
+    result_json: {
+      ...generated,
+      blueprint: {
+        id: blueprint.id,
+        promisedItemCount: blueprint.promisedItemCount || null,
+        slots: blueprint.slots,
+      },
+    },
   });
 
   let generatedVisuals = 0;
