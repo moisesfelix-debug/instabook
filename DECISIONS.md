@@ -17,3 +17,10 @@ Carousels start from structured templates and slide payloads. A fully freeform C
 
 ## 2026-09-28 — Instagram first
 Initial social publishing scope is Instagram through official Meta APIs.
+
+
+## 2026-09-28 — Supabase production foundation
+The production Supabase project runs in sa-east-1 (São Paulo). Initial tenant data is isolated with RLS. Public create_workspace is SECURITY INVOKER; SECURITY DEFINER helpers live in a private schema with restricted execution.
+
+## 2026-09-28 — Public Supabase settings can bootstrap the frontend
+The project URL and publishable key may be used client-side because authorization is enforced by RLS. Environment variables remain the preferred long-term configuration.
