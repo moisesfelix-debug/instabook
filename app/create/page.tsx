@@ -74,7 +74,7 @@ export default async function CreatePage({
 
               <SubmitButton className="cta full" pendingLabel="Gerando conteúdo...">Gerar e salvar rascunho ✦</SubmitButton>
             </form>
-            <p className="featureNote">Durante a fase de protótipo, a geração usa Ling 3.0 Flash Free via Vercel AI Gateway. O modelo de produção poderá ser trocado sem alterar o fluxo do produto.</p>
+            <p className="featureNote">Durante o protótipo, a geração usa uma rota gratuita temporária do Vercel AI Gateway. Em produção, usaremos um modelo estável com custo controlado.</p>
           </article>
 
           <article className="panel previewPanel generatorIntro">

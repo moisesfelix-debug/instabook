@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { deleteContent, updateContent } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { VisualCarousel } from "@/components/visual-carousel";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -42,12 +43,20 @@ export default async function ContentPage({
 
   if (!content) notFound();
 
-  const { data: brand } = await supabase
-    .from("brands")
-    .select("name")
-    .eq("id", content.brand_id)
-    .eq("workspace_id", workspace.id)
-    .maybeSingle();
+  const [{ data: brand }, { data: visualGuidelines }] = await Promise.all([
+    supabase
+      .from("brands")
+      .select("name")
+      .eq("id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("brand_guidelines")
+      .select("primary_color,secondary_color")
+      .eq("brand_id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+  ]);
 
   return (
     <AppShell>
@@ -61,6 +70,15 @@ export default async function ContentPage({
       </header>
 
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
+
+      {(slides || []).length > 0 && (
+        <VisualCarousel
+          brandName={brand?.name || "Marca"}
+          primaryColor={visualGuidelines?.primary_color}
+          secondaryColor={visualGuidelines?.secondary_color}
+          slides={slides || []}
+        />
+      )}
 
       <form className="contentEditor" action={updateContent}>
         <input type="hidden" name="contentId" value={content.id} />
