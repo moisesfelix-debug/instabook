@@ -149,7 +149,7 @@ export async function generateCarouselVisuals(formData: FormData) {
   const [{ data: content }, { data: slides }] = await Promise.all([
     supabase
       .from("contents")
-      .select("id,brand_id,type,content_archetype,art_direction")
+      .select("id,brand_id,type,content_archetype,art_direction,visual_style")
       .eq("id", contentId)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),

@@ -29,7 +29,7 @@ export default async function ContentPage({
   const [{ data: content }, { data: slides }] = await Promise.all([
     supabase
       .from("contents")
-      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at,hero_image_path,content_archetype,art_direction")
+      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at,hero_image_path,content_archetype,art_direction,visual_style")
       .eq("id", id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
@@ -150,6 +150,7 @@ export default async function ContentPage({
           heroImageUrl={heroImageUrl}
           contentArchetype={content.content_archetype}
           artDirection={content.art_direction}
+          visualStyle={content.visual_style}
           slides={visualSlides}
         />
       )}

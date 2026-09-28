@@ -4,6 +4,31 @@ import { getWorkspaceContext } from "@/lib/workspace-context";
 import { generateContent } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
 
+const archetypes = [
+  { value: "auto", label: "IA escolhe", description: "Analisa o briefing e define a melhor estrutura." },
+  { value: "checklist", label: "Checklist / Lista", description: "Erros, passos, dicas, frameworks e listas." },
+  { value: "story", label: "Story / Case", description: "Problema, virada, solução e resultado." },
+  { value: "comparison", label: "Comparação", description: "Antes/depois, mito/verdade, A x B." },
+  { value: "authority", label: "Dados / Autoridade", description: "Insights, análise, evidências e tendências." },
+  { value: "product", label: "Produto / Foto-led", description: "Produto, serviço, ambiente ou showcase." },
+] as const;
+
+const directions = [
+  { value: "auto", label: "IA escolhe", description: "Combina a estrutura com o conteúdo." },
+  { value: "editorial", label: "Editorial", description: "Headline forte e narrativa visual." },
+  { value: "split", label: "Split", description: "Contraste, imagem + texto e comparações." },
+  { value: "minimal", label: "Minimal", description: "Respiro, dados e sofisticação." },
+] as const;
+
+const visualStyles = [
+  { value: "auto", label: "IA escolhe", description: "Seleciona o pack mais coerente com a pauta." },
+  { value: "bold_performance", label: "Bold Performance", description: "Impacto, contraste e tipografia dominante." },
+  { value: "clean_consulting", label: "Clean Consulting", description: "Grid rigoroso e aparência B2B premium." },
+  { value: "human_editorial", label: "Human Editorial", description: "Fotografia e linguagem de revista." },
+  { value: "zine_collage", label: "Zine / Collage", description: "Recortes, camadas e personalidade." },
+  { value: "sensory_product", label: "Sensory Product", description: "Imagem protagonista e experiência visual." },
+] as const;
+
 export default async function CreatePage({
   searchParams,
 }: {
@@ -22,7 +47,7 @@ export default async function CreatePage({
       <header>
         <div>
           <h1>Criar conteúdo</h1>
-          <p>Briefing + identidade da marca + IA, salvo automaticamente como rascunho.</p>
+          <p>Defina a estratégia e o estilo antes da IA gerar texto, imagens e composição.</p>
         </div>
         <Link prefetch={false} className="secondaryBtn" href="/library">Ver biblioteca</Link>
       </header>
@@ -37,10 +62,11 @@ export default async function CreatePage({
           <Link prefetch={false} className="cta" href="/brands/new">Cadastrar marca</Link>
         </article>
       ) : (
-        <div className="creatorLayout">
-          <article className="panel creatorForm">
-            <span className="eyebrow">ASSISTENTE IA</span>
+        <div className="creatorLayout guidedCreatorLayout">
+          <article className="panel creatorForm guidedCreatorForm">
+            <span className="eyebrow">DIRETOR CRIATIVO IA</span>
             <h2>O que vamos criar?</h2>
+
             <form action={generateContent}>
               <label>Marca
                 <select name="brandId" required>
@@ -72,19 +98,66 @@ export default async function CreatePage({
                 <label><input type="radio" name="objective" value="vender" /><span>Vender</span></label>
               </fieldset>
 
-              <SubmitButton className="cta full" pendingLabel="Gerando conteúdo...">Gerar e salvar rascunho ✦</SubmitButton>
+              <div className="creativeBriefBlock">
+                <div className="creativeBriefHead">
+                  <div>
+                    <span className="eyebrow">ESTRATÉGIA DO CARROSSEL</span>
+                    <h3>Escolha antes de gerar</h3>
+                  </div>
+                  <small>Use “IA escolhe” para o modo rápido.</small>
+                </div>
+
+                <fieldset className="choiceFieldset">
+                  <legend>Arquétipo do conteúdo</legend>
+                  <div className="choiceGrid choiceGridArchetype">
+                    {archetypes.map((item) => (
+                      <label className="choiceCard" key={item.value}>
+                        <input type="radio" name="archetype" value={item.value} defaultChecked={item.value === "auto"} />
+                        <span><b>{item.label}</b><small>{item.description}</small></span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <fieldset className="choiceFieldset">
+                  <legend>Direção estrutural</legend>
+                  <div className="choiceGrid choiceGridDirection">
+                    {directions.map((item) => (
+                      <label className="choiceCard" key={item.value}>
+                        <input type="radio" name="artDirection" value={item.value} defaultChecked={item.value === "auto"} />
+                        <span><b>{item.label}</b><small>{item.description}</small></span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <fieldset className="choiceFieldset">
+                  <legend>Estilo visual</legend>
+                  <div className="choiceGrid choiceGridStyle">
+                    {visualStyles.map((item) => (
+                      <label className="choiceCard styleChoiceCard" key={item.value}>
+                        <input type="radio" name="visualStyle" value={item.value} defaultChecked={item.value === "auto"} />
+                        <span><b>{item.label}</b><small>{item.description}</small></span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
+
+              <SubmitButton className="cta full" pendingLabel="Criando conteúdo + visuais...">Gerar conteúdo completo ✦</SubmitButton>
             </form>
-            <p className="featureNote">Durante o protótipo, a geração usa uma rota gratuita temporária do Vercel AI Gateway. Em produção, usaremos um modelo estável com custo controlado.</p>
+
+            <p className="featureNote">GPT-5.4 Mini cria a estratégia e o texto; o Recraft gera os visuais de apoio já orientados pelo estilo escolhido.</p>
           </article>
 
           <article className="panel previewPanel generatorIntro">
-            <span className="eyebrow">COMO FUNCIONA</span>
-            <h2>A marca vira contexto, não só um nome.</h2>
+            <span className="eyebrow">NOVO FLUXO</span>
+            <h2>O visual nasce junto com a ideia.</h2>
             <div className="generationFlow">
-              <div><span>1</span><b>Briefing</b><small>Você informa a ideia e objetivo.</small></div>
-              <div><span>2</span><b>Identidade</b><small>Público, tom, pilares, palavras e CTA entram no prompt.</small></div>
-              <div><span>3</span><b>IA</b><small>O conteúdo é gerado de forma estruturada.</small></div>
-              <div><span>4</span><b>Rascunho</b><small>Slides, legenda e roteiro ficam salvos para edição.</small></div>
+              <div><span>1</span><b>Briefing</b><small>Ideia, objetivo e marca.</small></div>
+              <div><span>2</span><b>Estrutura</b><small>Checklist, story, comparação, autoridade ou produto.</small></div>
+              <div><span>3</span><b>Estilo</b><small>Direção estrutural + Style Pack definidos antes da geração.</small></div>
+              <div><span>4</span><b>Criação completa</b><small>Copy, slides e imagens são produzidos dentro da mesma intenção visual.</small></div>
             </div>
           </article>
         </div>

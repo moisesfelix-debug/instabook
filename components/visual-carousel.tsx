@@ -276,6 +276,7 @@ export function VisualCarousel({
   heroImageUrl,
   contentArchetype = "general",
   artDirection = "editorial",
+  visualStyle,
   slides,
 }: {
   brandName: string;
@@ -285,6 +286,7 @@ export function VisualCarousel({
   heroImageUrl?: string | null;
   contentArchetype?: Archetype | null;
   artDirection?: ArtDirection | null;
+  visualStyle?: VisualStyle | null;
   slides: VisualSlide[];
 }) {
   const archetype: Archetype = contentArchetype || "general";
@@ -292,8 +294,13 @@ export function VisualCarousel({
     ? (artDirection as ArtDirection)
     : "editorial";
 
+  const initialStyle: VisualStyle =
+    visualStyle && stylePacks.some((item) => item.id === visualStyle)
+      ? visualStyle
+      : recommendedStyle(archetype);
+
   const [direction, setDirection] = useState<ArtDirection>(initialDirection);
-  const [style, setStyle] = useState<VisualStyle>(recommendedStyle(archetype));
+  const [style, setStyle] = useState<VisualStyle>(initialStyle);
   const [index, setIndex] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
@@ -552,7 +559,7 @@ export function VisualCarousel({
             <h2>{archetypeLabels[archetype]}</h2>
             <span className="archetypeBadge">{roleLabels[displayRole]}</span>
           </div>
-          <p>O layout muda conforme a função do slide. Direção recomendada pela IA: <b>{artDirection || "editorial"}</b>.</p>
+          <p>O layout muda conforme a função do slide. Estrutura: <b>{artDirection || "editorial"}</b> • Estilo inicial: <b>{visualStyle || initialStyle}</b>.</p>
         </div>
         <button className="secondaryBtn visualDownload" type="button" onClick={downloadCurrentSlide} disabled={downloading}>
           {downloading ? "Preparando PNG..." : "Baixar slide PNG ↓"}

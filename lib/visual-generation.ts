@@ -19,6 +19,7 @@ type VisualContent = {
   id: string;
   content_archetype: string | null;
   art_direction: string | null;
+  visual_style: string | null;
 };
 
 type VisualBrand = {
@@ -72,6 +73,7 @@ export function buildSlideImagePrompt({
   body,
   role,
   placement,
+  visualStyle,
 }: {
   brandName: string;
   segment: string | null;
@@ -83,6 +85,7 @@ export function buildSlideImagePrompt({
   body: string | null;
   role: string;
   placement: VisualPlacement;
+  visualStyle: string;
 }) {
   const direction =
     artDirection === "minimal"
@@ -91,11 +94,25 @@ export function buildSlideImagePrompt({
         ? "high-contrast commercial editorial photography, clear subject separation, dynamic composition"
         : "bold contemporary editorial campaign photography, art-directed composition, premium magazine feel";
 
+  const styleLanguage =
+    visualStyle === "bold_performance"
+      ? "bold performance-marketing aesthetic, punchy contrast, graphic energy, dramatic crop, contemporary campaign feel"
+      : visualStyle === "clean_consulting"
+        ? "premium consulting aesthetic, restrained corporate editorial photography, precise geometry, sophisticated simplicity"
+        : visualStyle === "human_editorial"
+          ? "human editorial magazine aesthetic, natural candid photography, tactile realism, refined storytelling"
+          : visualStyle === "zine_collage"
+            ? "independent zine aesthetic, tactile paper textures, collage-ready shapes, imperfect analog energy, artistic framing"
+            : visualStyle === "sensory_product"
+              ? "sensory product advertising aesthetic, rich materials, appetizing or tactile detail, premium commercial lighting"
+              : "contemporary editorial art direction";
+
   return [
     `Create a professional Instagram visual asset for ${brandName}.`,
     `Brand segment: ${segment || "business"}.`,
     `Content archetype: ${archetype}. Slide role: ${role}. Visual placement: ${placement}.`,
     `Creative direction: ${direction}.`,
+    `Visual Style Pack: ${visualStyle}. Aesthetic language: ${styleLanguage}.`,
     `Semantic concept only (never reproduce this wording visually): ${headline || ""}. ${body || ""}`,
     primaryColor ? `Use ${primaryColor} only as a subtle photographic or material accent.` : "",
     secondaryColor ? `Secondary brand tone: ${secondaryColor}, used subtly.` : "",
@@ -150,6 +167,7 @@ export async function generateAndStoreVisuals({
         body: slide.body,
         role,
         placement,
+        visualStyle: content.visual_style || "human_editorial",
       });
 
       const generated = await generateImage({

@@ -11,6 +11,7 @@ const MODEL = "openai/gpt-5.4-mini";
 
 const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
 const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);
+const visualStyleSchema = z.enum(["bold_performance", "clean_consulting", "human_editorial", "zine_collage", "sensory_product"]);
 const slideRoleSchema = z.enum(["hook", "second_hook", "context", "item", "comparison", "proof", "transition", "result", "takeaway", "cta", "body"]);
 const emphasisSchema = z.enum(["high", "medium", "low"]);
 const visualPrioritySchema = z.enum(["text", "image", "balanced"]);
@@ -24,6 +25,7 @@ const generatedContentSchema = z.object({
   reelScript: z.string().max(4000),
   contentArchetype: archetypeSchema.optional(),
   artDirection: artDirectionSchema.optional(),
+  visualStyle: visualStyleSchema.optional(),
   slides: z.array(
     z.object({
       headline: z.string().max(140),
@@ -41,6 +43,7 @@ const generatedContentSchema = z.object({
 
 type Archetype = z.infer<typeof archetypeSchema>;
 type ArtDirection = z.infer<typeof artDirectionSchema>;
+type VisualStyle = z.infer<typeof visualStyleSchema>;
 type SlideRole = z.infer<typeof slideRoleSchema>;
 type Emphasis = z.infer<typeof emphasisSchema>;
 type VisualPriority = z.infer<typeof visualPrioritySchema>;
@@ -82,6 +85,14 @@ function suggestedDirection(archetype: Archetype): ArtDirection {
   if (archetype === "comparison" || archetype === "product") return "split";
   if (archetype === "authority") return "minimal";
   return "editorial";
+}
+
+function suggestedStyle(archetype: Archetype): VisualStyle {
+  if (archetype === "checklist" || archetype === "comparison") return "bold_performance";
+  if (archetype === "authority") return "clean_consulting";
+  if (archetype === "product") return "sensory_product";
+  if (archetype === "story") return "human_editorial";
+  return "human_editorial";
 }
 
 function fallbackRole(archetype: Archetype, position: number, total: number): SlideRole {
@@ -134,15 +145,28 @@ function fallbackVisualPriority(archetype: Archetype, role: SlideRole): VisualPr
   return "text";
 }
 
-function normalizeGenerated(generated: Generated, briefing: string) {
-  const archetype = generated.contentArchetype || inferArchetype(briefing, generated.title);
-  const artDirection = generated.artDirection || suggestedDirection(archetype);
+function normalizeGenerated(
+  generated: Generated,
+  briefing: string,
+  requested: {
+    archetype: Archetype | null;
+    artDirection: ArtDirection | null;
+    visualStyle: VisualStyle | null;
+  }
+) {
+  const archetype =
+    requested.archetype || generated.contentArchetype || inferArchetype(briefing, generated.title);
+  const artDirection =
+    requested.artDirection || generated.artDirection || suggestedDirection(archetype);
+  const visualStyle =
+    requested.visualStyle || generated.visualStyle || suggestedStyle(archetype);
   const total = generated.slides.length;
 
   return {
     ...generated,
     contentArchetype: archetype,
     artDirection,
+    visualStyle,
     slides: generated.slides.map((slide, index) => {
       const position = index + 1;
       const role: SlideRole =
@@ -171,6 +195,20 @@ export async function generateContent(formData: FormData) {
   const briefing = String(formData.get("briefing") || "").trim();
   const type = String(formData.get("type") || "carousel");
   const objective = String(formData.get("objective") || "educar");
+  const archetypeInput = String(formData.get("archetype") || "auto");
+  const artDirectionInput = String(formData.get("artDirection") || "auto");
+  const visualStyleInput = String(formData.get("visualStyle") || "auto");
+
+  const parsedArchetype = archetypeSchema.safeParse(archetypeInput);
+  const parsedArtDirection = artDirectionSchema.safeParse(artDirectionInput);
+  const parsedVisualStyle = visualStyleSchema.safeParse(visualStyleInput);
+
+  const requestedArchetype =
+    archetypeInput === "auto" ? null : parsedArchetype.success ? parsedArchetype.data : null;
+  const requestedArtDirection =
+    artDirectionInput === "auto" ? null : parsedArtDirection.success ? parsedArtDirection.data : null;
+  const requestedVisualStyle =
+    visualStyleInput === "auto" ? null : parsedVisualStyle.success ? parsedVisualStyle.data : null;
 
   if (!brandId || briefing.length < 8) {
     fail("Escolha uma marca e descreva melhor a ideia do conteúdo.");
@@ -229,6 +267,13 @@ Formato: ${type}
 Objetivo: ${objective}
 Briefing: ${briefing}
 
+DECISÕES DO USUÁRIO
+Arquétipo solicitado: ${requestedArchetype || "IA escolhe"}
+Direção estrutural solicitada: ${requestedArtDirection || "IA escolhe"}
+Estilo visual solicitado: ${requestedVisualStyle || "IA escolhe"}
+
+Se o usuário escolheu um valor específico acima, RESPEITE-O. Só escolha livremente quando estiver "IA escolhe".
+
 ESCOLHA UM ARQUÉTIPO
 - checklist: listas, erros, passos, dicas, frameworks e sequências práticas.
 - story: case, jornada, problema → tensão → virada → solução → resultado.
@@ -242,6 +287,16 @@ Escolha uma entre editorial, split ou minimal.
 - editorial: impacto, headline forte e narrativa.
 - split: contraste, comparação, imagem + texto.
 - minimal: informação premium, dados, respiro e sofisticação.
+
+ESTILO VISUAL
+Escolha um Style Pack:
+- bold_performance: alto contraste, marketing/growth, headlines fortes, números e energia.
+- clean_consulting: consultoria/B2B premium, grid organizado, respiro, credibilidade e sobriedade.
+- human_editorial: fotografia humana, linguagem de revista, sofisticação e narrativa.
+- zine_collage: recortes, textura, camadas, personalidade e estética autoral.
+- sensory_product: imagem protagonista, produto/comida/ambiente, textura e desejo visual.
+
+O Style Pack deve influenciar a linguagem do texto, a densidade dos slides e quais slides precisam de imagem.
 
 PAPÉIS DOS SLIDES
 Use apenas: hook, second_hook, context, item, comparison, proof, transition, result, takeaway, cta, body.
@@ -277,6 +332,7 @@ Use exatamente estas chaves:
   "reelScript": "string",
   "contentArchetype": "checklist|story|comparison|product|authority|general",
   "artDirection": "editorial|split|minimal",
+  "visualStyle": "bold_performance|clean_consulting|human_editorial|zine_collage|sensory_product",
   "slides": [
     {
       "headline": "string",
@@ -303,7 +359,11 @@ Use exatamente estas chaves:
     });
 
     const parsed = parseGeneratedContent(result.text);
-    generated = normalizeGenerated(parsed, briefing);
+    generated = normalizeGenerated(parsed, briefing, {
+      archetype: requestedArchetype,
+      artDirection: requestedArtDirection,
+      visualStyle: requestedVisualStyle,
+    });
 
     if (type === "carousel" && generated.slides.length !== 7) {
       throw new Error(`Expected 7 slides, received ${generated.slides.length}`);
@@ -348,6 +408,7 @@ Use exatamente estas chaves:
       objective,
       content_archetype: generated.contentArchetype,
       art_direction: generated.artDirection,
+      visual_style: generated.visualStyle,
       status: "draft",
       created_by: user.id,
     })
@@ -410,6 +471,7 @@ Use exatamente estas chaves:
           id: content.id,
           content_archetype: generated.contentArchetype,
           art_direction: generated.artDirection,
+          visual_style: generated.visualStyle,
         },
         brand: {
           name: brand.name,
