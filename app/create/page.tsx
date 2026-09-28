@@ -59,39 +59,54 @@ export default async function CreatePage({
       ) : (
         <div className="creatorLayout guidedCreatorLayout">
           <article className="panel creatorForm guidedCreatorForm">
-            <span className="eyebrow">DIRETOR CRIATIVO IA</span>
-            <h2>O que vamos criar?</h2>
+            <div className="creatorHero">
+              <div>
+                <span className="eyebrow">DIRETOR CRIATIVO IA</span>
+                <h2>Monte a direção antes de gerar</h2>
+                <p>Briefing, estrutura e família visual entram juntos na geração.</p>
+              </div>
+              <div className="creatorHeroSteps" aria-label="Fluxo de criação">
+                <span><b>1</b> Ideia</span>
+                <span><b>2</b> Estrutura</span>
+                <span><b>3</b> Visual</span>
+                <span><b>4</b> Gerar</span>
+              </div>
+            </div>
 
             <form action={generateContent}>
-              <label>Marca
-                <select name="brandId" required>
-                  {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
-                </select>
-              </label>
+              <div className="createBasicsGrid">
+                <label className="brandSelectField">Marca
+                  <select name="brandId" required>
+                    {brands.map((brand) => <option value={brand.id} key={brand.id}>{brand.name}</option>)}
+                  </select>
+                </label>
 
-              <label>Ideia ou briefing
-                <textarea
-                  name="briefing"
-                  required
-                  minLength={8}
-                  placeholder="Ex.: crie um carrossel mostrando 5 erros que restaurantes cometem ao tentar vender pelo Instagram."
-                />
-              </label>
+                <label className="briefingField">Ideia ou briefing
+                  <textarea
+                    name="briefing"
+                    required
+                    minLength={8}
+                    placeholder="Ex.: crie um carrossel mostrando 5 erros que restaurantes cometem ao tentar vender pelo Instagram."
+                  />
+                </label>
+              </div>
 
-              <fieldset className="radioGroup">
-                <legend>Formato</legend>
-                <label><input type="radio" name="type" value="carousel" defaultChecked /><span>Carrossel</span></label>
-                <label><input type="radio" name="type" value="post" /><span>Post estático</span></label>
-                <label><input type="radio" name="type" value="reel" /><span>Roteiro de Reel</span></label>
-              </fieldset>
+              <div className="createQuickSettings">
+                <fieldset className="radioGroup createSettingGroup">
+                  <legend>Formato</legend>
+                  <label><input type="radio" name="type" value="carousel" defaultChecked /><span>Carrossel</span></label>
+                  <label><input type="radio" name="type" value="post" /><span>Post estático</span></label>
+                  <label><input type="radio" name="type" value="reel" /><span>Roteiro de Reel</span></label>
+                </fieldset>
 
-              <fieldset className="radioGroup">
-                <legend>Objetivo</legend>
-                <label><input type="radio" name="objective" value="educar" defaultChecked /><span>Educar</span></label>
-                <label><input type="radio" name="objective" value="engajar" /><span>Engajar</span></label>
-                <label><input type="radio" name="objective" value="leads" /><span>Gerar leads</span></label>
-                <label><input type="radio" name="objective" value="vender" /><span>Vender</span></label>
-              </fieldset>
+                <fieldset className="radioGroup createSettingGroup">
+                  <legend>Objetivo</legend>
+                  <label><input type="radio" name="objective" value="educar" defaultChecked /><span>Educar</span></label>
+                  <label><input type="radio" name="objective" value="engajar" /><span>Engajar</span></label>
+                  <label><input type="radio" name="objective" value="leads" /><span>Gerar leads</span></label>
+                  <label><input type="radio" name="objective" value="vender" /><span>Vender</span></label>
+                </fieldset>
+              </div>
 
               <div className="creativeBriefBlock">
                 <div className="creativeBriefHead">
@@ -102,33 +117,38 @@ export default async function CreatePage({
                   <small>Use “IA escolhe” para o modo rápido.</small>
                 </div>
 
-                <fieldset className="choiceFieldset">
-                  <legend>Arquétipo do conteúdo</legend>
-                  <div className="choiceGrid choiceGridArchetype">
+                <div className="strategyChoiceGrid">
+                  <fieldset className="choiceFieldset">
+                    <legend>Arquétipo do conteúdo</legend>
+                    <div className="choiceGrid choiceGridArchetype">
                     {archetypes.map((item) => (
                       <label className="choiceCard" key={item.value}>
                         <input type="radio" name="archetype" value={item.value} defaultChecked={item.value === "auto"} />
                         <span><b>{item.label}</b><small>{item.description}</small></span>
                       </label>
                     ))}
-                  </div>
-                </fieldset>
+                    </div>
+                  </fieldset>
 
-                <fieldset className="choiceFieldset">
-                  <legend>Direção estrutural</legend>
-                  <div className="choiceGrid choiceGridDirection">
+                  <fieldset className="choiceFieldset">
+                    <legend>Direção estrutural</legend>
+                    <div className="choiceGrid choiceGridDirection">
                     {directions.map((item) => (
                       <label className="choiceCard" key={item.value}>
                         <input type="radio" name="artDirection" value={item.value} defaultChecked={item.value === "auto"} />
                         <span><b>{item.label}</b><small>{item.description}</small></span>
                       </label>
                     ))}
-                  </div>
-                </fieldset>
+                    </div>
+                  </fieldset>
+                </div>
 
                 <fieldset className="choiceFieldset familyFieldset">
                   <legend>Família visual</legend>
-                  <p className="choiceHelper">Escolha pela aparência. O preview representa a linguagem que o motor vai usar nos slides.</p>
+                  <div className="familySectionHead">
+                    <p className="choiceHelper">Escolha pela aparência. Os exemplos abaixo simulam uma capa real no formato 4:5.</p>
+                    <span>Você pode trocar depois</span>
+                  </div>
                   <div className="familyChoiceGrid">
                     <label className="familyChoiceCard">
                       <input type="radio" name="visualFamily" value="auto" defaultChecked />
@@ -164,16 +184,6 @@ export default async function CreatePage({
             <p className="featureNote">A família visual orienta a copy, a composição e as imagens. Depois da geração, tudo continua editável.</p>
           </article>
 
-          <article className="panel previewPanel generatorIntro">
-            <span className="eyebrow">NOVO FLUXO</span>
-            <h2>O visual nasce junto com a ideia.</h2>
-            <div className="generationFlow">
-              <div><span>1</span><b>Briefing</b><small>Ideia, objetivo e marca.</small></div>
-              <div><span>2</span><b>Estrutura</b><small>Checklist, story, comparação, autoridade ou produto.</small></div>
-              <div><span>3</span><b>Estilo</b><small>Direção estrutural + Style Pack definidos antes da geração.</small></div>
-              <div><span>4</span><b>Criação completa</b><small>Copy, slides e imagens são produzidos dentro da mesma intenção visual.</small></div>
-            </div>
-          </article>
         </div>
       )}
     </AppShell>
