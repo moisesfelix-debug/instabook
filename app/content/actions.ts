@@ -174,13 +174,14 @@ function buildSlideImagePrompt({
     `Brand segment: ${segment || "business"}.`,
     `Content archetype: ${archetype}. Slide role: ${role}.`,
     `Creative direction: ${direction}.`,
-    `Slide idea: ${headline || ""}. ${body || ""}`,
-    primaryColor ? `Use ${primaryColor} as a subtle brand accent.` : "",
-    secondaryColor ? `Secondary brand tone: ${secondaryColor}.` : "",
-    "Vertical 4:5 composition. Create a sophisticated campaign-quality background or editorial scene.",
-    "Leave intentional negative space for typography. Strong focal point, natural depth, excellent lighting and material detail.",
-    "Do not render any words, letters, captions, logos, watermarks, UI, frames or fake typography inside the image.",
-    "Avoid generic stock-photo aesthetics, obvious AI artifacts, cheesy business imagery and clutter.",
+    `Semantic concept only (never reproduce this wording visually): ${headline || ""}. ${body || ""}`,
+    primaryColor ? `Use ${primaryColor} only as a subtle photographic or material accent.` : "",
+    secondaryColor ? `Secondary brand tone: ${secondaryColor}, used subtly.` : "",
+    "OUTPUT MUST BE A PURE VISUAL ASSET, NOT A POSTER, NOT A SOCIAL MEDIA DESIGN AND NOT A FINISHED CAROUSEL SLIDE.",
+    "Vertical 4:5 editorial photograph or illustration only. Show a scene, subject, object, texture or conceptual visual.",
+    "Leave intentional negative space where our separate layout engine can place typography later.",
+    "ABSOLUTELY NO TEXT: no words, no letters, no numbers, no captions, no signs, no logos, no watermarks, no labels, no interface elements, no fake typography, no poster layout.",
+    "Do not draw text-like marks or unreadable pseudo-letters. Avoid generic stock-photo aesthetics, obvious AI artifacts, cheesy business imagery and clutter.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -230,19 +231,15 @@ export async function generateCarouselVisuals(formData: FormData) {
     redirect(`/content/${contentId}?error=${encodeURIComponent("A marca desse conteúdo não foi encontrada.")}`);
   }
 
-  const cover = slides.find((slide) => slide.position === 1);
   const imageFirst = slides.filter(
-    (slide) => slide.position !== 1 && slide.slide_role !== "cta" && slide.visual_priority === "image"
+    (slide) => slide.slide_role !== "cta" && slide.visual_priority === "image"
   );
   const balanced = slides.filter(
-    (slide) =>
-      slide.position !== 1 &&
-      slide.slide_role !== "cta" &&
-      slide.visual_priority === "balanced"
+    (slide) => slide.slide_role !== "cta" && slide.visual_priority === "balanced"
   );
 
-  const selected = [cover, ...imageFirst, ...balanced]
-    .filter((slide): slide is NonNullable<typeof slide> => Boolean(slide))
+  // Never force an AI image into a text-first slide. Text-led covers should stay typographic.
+  const selected = [...imageFirst, ...balanced]
     .filter((slide, index, array) => array.findIndex((item) => item.id === slide.id) === index)
     .slice(0, 3);
 
