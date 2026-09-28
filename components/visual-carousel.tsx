@@ -92,7 +92,6 @@ function imagePlacement(
   archetype: Archetype,
   style: VisualStyle
 ): ImagePlacement {
-  if (!slide.image_url) return "none";
   if (role === "comparison" || role === "cta") return "none";
   if (role === "hook" || role === "second_hook") return "background";
   if (archetype === "product" || style === "sensory_product" || slide.visual_priority === "image") return "hero";
@@ -325,9 +324,10 @@ export function VisualCarousel({
 
     const activeImageUrl = current.image_url || (current.visual_priority !== "text" ? heroImageUrl : null);
     const [hero, logo] = await Promise.all([loadBitmap(activeImageUrl), loadBitmap(logoUrl)]);
+    const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
+    const placement = imagePlacement(current, slideRole, archetype, style);
     const headline = displayHeadline(current, slideRole);
     const body = current.body || "";
-    const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
     const number = String(current.position).padStart(2, "0");
     const total = String(slides.length).padStart(2, "0");
     const brandInitials = initials(brandName);
@@ -336,50 +336,65 @@ export function VisualCarousel({
 
     ctx.textBaseline = "top";
 
-    // Base art direction.
+    // Base art direction. Images are visual assets; InstaBook owns typography and layout.
     if (direction === "editorial") {
       ctx.fillStyle = primary;
       ctx.fillRect(0, 0, 1080, 1350);
-      if (hero && (current.visual_priority === "image" || current.visual_priority === "balanced" || slideRole === "hook")) {
-        drawCover(ctx, hero, 0, 0, 1080, 1350);
-        const gradient = ctx.createLinearGradient(0, 0, 0, 1350);
-        gradient.addColorStop(0, "rgba(7,7,12,.15)");
-        gradient.addColorStop(.45, "rgba(7,7,12,.38)");
-        gradient.addColorStop(1, "rgba(7,7,12,.9)");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 1080, 1350);
-      }
       ctx.fillStyle = primary;
       ctx.fillRect(0, 0, 1080, 18);
     } else if (direction === "split") {
       ctx.fillStyle = secondary;
       ctx.fillRect(0, 0, 1080, 1350);
       ctx.fillStyle = primary;
-      ctx.fillRect(0, 0, 1080, slideRole === "comparison" ? 180 : 430);
-      if (hero && current.visual_priority !== "text" && slideRole !== "comparison") {
-        drawCover(ctx, hero, 0, 0, 1080, 430);
-        ctx.fillStyle = "rgba(0,0,0,.18)";
-        ctx.fillRect(0, 0, 1080, 430);
-      }
+      ctx.fillRect(0, 0, 1080, slideRole === "comparison" ? 180 : 210);
     } else {
       ctx.fillStyle = "#f8f8f5";
       ctx.fillRect(0, 0, 1080, 1350);
       ctx.fillStyle = primary;
       ctx.fillRect(72, 72, 12, 1206);
-      if (hero && current.visual_priority === "image") {
+    }
+
+    if (hero && placement !== "none") {
+      if (placement === "background") {
+        drawCover(ctx, hero, 0, 0, 1080, 1350);
+        ctx.fillStyle = direction === "minimal" ? "rgba(248,248,245,.68)" : "rgba(8,9,14,.58)";
+        ctx.fillRect(0, 0, 1080, 1350);
+        if (direction === "editorial") {
+          const gradient = ctx.createLinearGradient(0, 0, 0, 1350);
+          gradient.addColorStop(0, "rgba(8,9,14,.08)");
+          gradient.addColorStop(1, "rgba(8,9,14,.55)");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, 1080, 1350);
+        }
+      } else if (placement === "hero") {
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(500, 205, 455, 385, 30);
+        ctx.roundRect(70, 245, 940, 500, 34);
         ctx.clip();
-        drawCover(ctx, hero, 500, 205, 455, 385);
+        drawCover(ctx, hero, 70, 245, 940, 500);
+        ctx.restore();
+      } else if (placement === "side") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(600, 330, 400, 560, 32);
+        ctx.clip();
+        drawCover(ctx, hero, 600, 330, 400, 560);
+        ctx.restore();
+      } else if (placement === "card") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(565, 270, 410, 380, 30);
+        ctx.clip();
+        drawCover(ctx, hero, 565, 270, 410, 380);
         ctx.restore();
       }
     }
 
     const light = direction !== "minimal";
-    const mainText = light ? "#ffffff" : secondary;
-    const softText = light ? "rgba(255,255,255,.76)" : "#636674";
-    const pillBg = light ? "rgba(255,255,255,.16)" : primary;
+    const darkImageBackground = Boolean(hero && placement === "background" && direction !== "minimal");
+    const mainText = darkImageBackground || light ? "#ffffff" : secondary;
+    const softText = darkImageBackground || light ? "rgba(255,255,255,.78)" : "#636674";
+    const pillBg = darkImageBackground || light ? "rgba(255,255,255,.16)" : primary;
     const pillText = "#ffffff";
 
     drawLogo(ctx, logo, brandInitials, 78, 68, 68, pillBg, pillText);
@@ -405,8 +420,9 @@ export function VisualCarousel({
       }
     } else if (slideRole === "item") {
       const hasNumberBadge = badgeCarriesNumber(current.badge);
+      const visualAtRight = Boolean(hero && (placement === "side" || placement === "card"));
       const textX = hasNumberBadge ? 78 : 280;
-      const textWidth = hasNumberBadge ? 900 : 690;
+      const textWidth = visualAtRight ? (hasNumberBadge ? 450 : 300) : (hasNumberBadge ? 900 : 690);
 
       if (!hasNumberBadge) {
         ctx.fillStyle = primary;
