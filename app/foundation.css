@@ -28,3 +28,41 @@
 .proCanvas.style-sensory_product.hasHero>.visualHeroLayer{inset:0!important;width:auto!important;height:auto!important;border-radius:0!important;filter:saturate(1.12) contrast(1.04)}.proCanvas.style-sensory_product.hasHero .roleAwareCopy{margin-top:auto!important;margin-bottom:28px;max-width:92%;padding:18px 20px;border-radius:16px;background:rgba(10,10,14,.32);backdrop-filter:blur(9px)}.proCanvas.style-sensory_product.hasHero .roleAwareCopy h3{font-size:36px;letter-spacing:-.045em}.proCanvas.style-sensory_product.hasHero .roleAwareCopy p{color:rgba(255,255,255,.86)!important}.proCanvas.style-sensory_product .visualHighlight{font-size:32px}.proCanvas.style-sensory_product .roleChip{background:rgba(10,10,14,.4)}
 
 @media(max-width:980px){.stylePackPicker{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.stylePackPicker{grid-template-columns:1fr}.visualControlLabel{align-items:flex-start;flex-direction:column;gap:3px}}
+
+/* Role-aware image placement */
+.proCanvas.image-background>.visualHeroLayer{inset:0!important;width:auto!important;height:auto!important;border-radius:0!important}
+.proCanvas.image-background:before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(8,9,14,.18),rgba(8,9,14,.62))}
+.proCanvas.minimal.image-background:before{background:rgba(248,248,245,.72)}
+.proCanvas.image-background .roleAwareCopy{margin-top:auto;margin-bottom:24px;max-width:92%}
+
+.proCanvas.image-side>.visualHeroLayer{left:auto!important;right:7%!important;top:24%!important;width:42%!important;height:52%!important;border-radius:18px!important}
+.proCanvas.image-side .roleAwareCopy{max-width:48%;margin-top:auto;margin-bottom:auto}
+.proCanvas.image-side .roleAwareCopy h3{max-width:100%!important}
+.proCanvas.image-side .roleAwareCopy p{max-width:100%!important}
+.proCanvas.image-side:before{display:none!important}
+
+.proCanvas.image-card>.visualHeroLayer{left:auto!important;right:7%!important;top:18%!important;width:42%!important;height:31%!important;border-radius:18px!important}
+.proCanvas.image-card .roleAwareCopy{max-width:50%;margin-top:42%;margin-bottom:auto}
+.proCanvas.image-card:before{display:none!important}
+
+.proCanvas.image-hero>.visualHeroLayer{left:7%!important;right:7%!important;top:18%!important;width:auto!important;height:40%!important;border-radius:18px!important}
+.proCanvas.image-hero .roleAwareCopy{margin-top:auto;margin-bottom:12px;max-width:92%}
+.proCanvas.image-hero:before{display:none!important}
+
+.proCanvas.image-none>.visualHeroLayer{display:none!important}
+.proCanvas.image-none:before{display:none!important}
+
+.proCanvas.role-item.image-side .roleAwareCopy,
+.proCanvas.role-item.image-card .roleAwareCopy{max-width:46%}
+.proCanvas.role-item.image-side .visualHighlight,
+.proCanvas.role-item.image-card .visualHighlight{font-size:31px}
+
+.proCanvas.style-sensory_product.image-hero>.visualHeroLayer{left:0!important;right:0!important;top:0!important;height:58%!important;border-radius:0!important}
+.proCanvas.style-sensory_product.image-hero .roleAwareCopy{max-width:92%;margin-top:auto!important;margin-bottom:22px!important}
+
+@media(max-width:620px){
+  .proCanvas.image-side>.visualHeroLayer,.proCanvas.image-card>.visualHeroLayer{left:9%!important;right:9%!important;top:18%!important;width:auto!important;height:29%!important}
+  .proCanvas.image-side .roleAwareCopy,.proCanvas.image-card .roleAwareCopy,.proCanvas.role-item.image-side .roleAwareCopy,.proCanvas.role-item.image-card .roleAwareCopy{max-width:100%;margin-top:52%}
+  .proCanvas.image-hero>.visualHeroLayer{left:9%!important;right:9%!important;height:34%!important}
+  .proCanvas.image-hero .roleAwareCopy{margin-top:48%}
+}
