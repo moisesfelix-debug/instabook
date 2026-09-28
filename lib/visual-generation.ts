@@ -1,5 +1,6 @@
 import { experimental_generateImage as generateImage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { visualFamilyById } from "@/lib/visual-families";
 
 export const IMAGE_MODEL = "recraft/recraft-v4.1";
 
@@ -20,6 +21,7 @@ type VisualContent = {
   content_archetype: string | null;
   art_direction: string | null;
   visual_style: string | null;
+  visual_family: string | null;
 };
 
 type VisualBrand = {
@@ -79,6 +81,7 @@ export function buildSlideImagePrompt({
   role,
   placement,
   visualStyle,
+  visualFamily,
 }: {
   brandName: string;
   segment: string | null;
@@ -91,6 +94,7 @@ export function buildSlideImagePrompt({
   role: string;
   placement: VisualPlacement;
   visualStyle: string;
+  visualFamily: string;
 }) {
   const direction =
     artDirection === "minimal"
@@ -117,7 +121,8 @@ export function buildSlideImagePrompt({
     `Brand segment: ${segment || "business"}.`,
     `Content archetype: ${archetype}. Slide role: ${role}. Visual placement: ${placement}.`,
     `Creative direction: ${direction}.`,
-    `Visual Style Pack: ${visualStyle}. Aesthetic language: ${styleLanguage}.`,
+    `Internal style system: ${visualStyle}. Aesthetic language: ${styleLanguage}.`,
+    `Visual family: ${visualFamily}. Family direction: ${visualFamilyById(visualFamily).prompt}.`,
     `Semantic concept only (never reproduce this wording visually): ${headline || ""}. ${body || ""}`,
     primaryColor ? `Use ${primaryColor} only as a subtle photographic or material accent.` : "",
     secondaryColor ? `Secondary brand tone: ${secondaryColor}, used subtly.` : "",
@@ -172,7 +177,8 @@ export async function generateAndStoreVisuals({
         body: slide.body,
         role,
         placement,
-        visualStyle: content.visual_style || "human_editorial",
+        visualStyle: content.visual_style || "clean_consulting",
+        visualFamily: content.visual_family || "atlas",
       });
 
       const generated = await generateImage({
