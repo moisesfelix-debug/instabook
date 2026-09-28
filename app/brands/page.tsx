@@ -40,7 +40,7 @@ export default async function BrandsPage() {
 
   const brands = (brandsData as Brand[] | null) ?? [];
   const clients = (clientsData as Client[] | null) ?? [];
-  const clientNames = new Map(clients.map((client) => [client.id, client.name]));
+  const clientNames = new Map(clients.map((client) => [client.id, client.name] as const));
 
   return (
     <AppShell>
