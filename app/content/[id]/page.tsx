@@ -29,13 +29,13 @@ export default async function ContentPage({
   const [{ data: content }, { data: slides }] = await Promise.all([
     supabase
       .from("contents")
-      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at,hero_image_path")
+      .select("id,brand_id,type,title,hook,caption,cta,hashtags,reel_script,briefing,objective,status,created_at,hero_image_path,content_archetype,art_direction")
       .eq("id", id)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
     supabase
       .from("content_slides")
-      .select("id,position,headline,body")
+      .select("id,position,headline,body,slide_role,emphasis,visual_priority,badge,highlight,secondary_headline,secondary_body")
       .eq("content_id", id)
       .eq("workspace_id", workspace.id)
       .order("position"),
@@ -113,6 +113,8 @@ export default async function ContentPage({
           secondaryColor={visualGuidelines?.secondary_color}
           logoUrl={logoUrl}
           heroImageUrl={heroImageUrl}
+          contentArchetype={content.content_archetype}
+          artDirection={content.art_direction}
           slides={slides || []}
         />
       )}
@@ -134,6 +136,7 @@ export default async function ContentPage({
                 {(slides || []).map((slide) => (
                   <div className="slideEditor" key={slide.id}>
                     <span>{String(slide.position).padStart(2, "0")}</span>
+                    <small className="slideRoleTag">{String(slide.slide_role || "body").replace("_", " ")}</small>
                     <label>Headline<input name={`slideHeadline_${slide.id}`} defaultValue={slide.headline || ""} /></label>
                     <label>Texto<textarea name={`slideBody_${slide.id}`} defaultValue={slide.body || ""} /></label>
                   </div>

@@ -8,6 +8,12 @@ import { getWorkspaceContext } from "@/lib/workspace-context";
 
 const MODEL = "inclusionai/ling-3.0-flash-sante-free";
 
+const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
+const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);
+const slideRoleSchema = z.enum(["hook", "second_hook", "context", "item", "comparison", "proof", "transition", "result", "takeaway", "cta", "body"]);
+const emphasisSchema = z.enum(["high", "medium", "low"]);
+const visualPrioritySchema = z.enum(["text", "image", "balanced"]);
+
 const generatedContentSchema = z.object({
   title: z.string().min(3).max(120),
   hook: z.string().max(220),
@@ -15,13 +21,29 @@ const generatedContentSchema = z.object({
   cta: z.string().max(300),
   hashtags: z.array(z.string()).max(12),
   reelScript: z.string().max(4000),
+  contentArchetype: archetypeSchema.optional(),
+  artDirection: artDirectionSchema.optional(),
   slides: z.array(
     z.object({
       headline: z.string().max(140),
       body: z.string().max(600),
+      role: slideRoleSchema.optional(),
+      emphasis: emphasisSchema.optional(),
+      visualPriority: visualPrioritySchema.optional(),
+      badge: z.string().max(50).nullable().optional(),
+      highlight: z.string().max(90).nullable().optional(),
+      secondaryHeadline: z.string().max(140).nullable().optional(),
+      secondaryBody: z.string().max(400).nullable().optional(),
     })
   ).max(10),
 });
+
+type Archetype = z.infer<typeof archetypeSchema>;
+type ArtDirection = z.infer<typeof artDirectionSchema>;
+type SlideRole = z.infer<typeof slideRoleSchema>;
+type Emphasis = z.infer<typeof emphasisSchema>;
+type VisualPriority = z.infer<typeof visualPrioritySchema>;
+type Generated = z.infer<typeof generatedContentSchema>;
 
 function fail(message: string): never {
   redirect("/create?error=" + encodeURIComponent(message));
@@ -41,6 +63,101 @@ function parseGeneratedContent(text: string) {
   }
 
   return generatedContentSchema.parse(JSON.parse(cleaned.slice(start, end + 1)));
+}
+
+function inferArchetype(briefing: string, title: string): Archetype {
+  const source = (briefing + " " + title).toLowerCase();
+
+  if (/\b(antes|depois|versus|vs\.?|compar|mito|verdade|errado|certo)\b/.test(source)) return "comparison";
+  if (/\b(case|história|historia|jornada|como .* conseguiu|bastidor)\b/.test(source)) return "story";
+  if (/\b(produto|prato|restaurante|ambiente|lançamento|lancamento|showcase|cardápio|cardapio)\b/.test(source)) return "product";
+  if (/\b(dado|dados|estatística|estatistica|pesquisa|estudo|número|numero|insight|tendência|tendencia)\b/.test(source)) return "authority";
+  if (/\b(\d+\s+(erros|passos|dicas|formas|maneiras|motivos|ideias|sinais)|checklist|lista|erros|passos|dicas)\b/.test(source)) return "checklist";
+
+  return "general";
+}
+
+function suggestedDirection(archetype: Archetype): ArtDirection {
+  if (archetype === "comparison" || archetype === "product") return "split";
+  if (archetype === "authority") return "minimal";
+  return "editorial";
+}
+
+function fallbackRole(archetype: Archetype, position: number, total: number): SlideRole {
+  if (position === 1) return "hook";
+  if (position === total) return "cta";
+
+  if (archetype === "checklist") {
+    if (position === 2) return "second_hook";
+    return "item";
+  }
+
+  if (archetype === "story") {
+    if (position === 2) return "context";
+    if (position === 4) return "transition";
+    if (position === 5) return "result";
+    if (position === 6) return "takeaway";
+    return "body";
+  }
+
+  if (archetype === "comparison") {
+    if (position === 2) return "second_hook";
+    return "comparison";
+  }
+
+  if (archetype === "product") {
+    if (position === 2) return "context";
+    if (position === total - 1) return "proof";
+    return "item";
+  }
+
+  if (archetype === "authority") {
+    if (position === 2) return "context";
+    if (position <= total - 2) return "proof";
+    return "takeaway";
+  }
+
+  return position === 2 ? "context" : "body";
+}
+
+function fallbackEmphasis(role: SlideRole): Emphasis {
+  if (["hook", "second_hook", "proof", "result", "cta"].includes(role)) return "high";
+  if (["context", "takeaway", "transition"].includes(role)) return "medium";
+  return "medium";
+}
+
+function fallbackVisualPriority(archetype: Archetype, role: SlideRole): VisualPriority {
+  if (archetype === "product") return role === "cta" ? "balanced" : "image";
+  if (role === "hook") return "balanced";
+  if (["proof", "comparison", "result"].includes(role)) return "balanced";
+  return "text";
+}
+
+function normalizeGenerated(generated: Generated, briefing: string) {
+  const archetype = generated.contentArchetype || inferArchetype(briefing, generated.title);
+  const artDirection = generated.artDirection || suggestedDirection(archetype);
+  const total = generated.slides.length;
+
+  return {
+    ...generated,
+    contentArchetype: archetype,
+    artDirection,
+    slides: generated.slides.map((slide, index) => {
+      const position = index + 1;
+      const role = slide.role || fallbackRole(archetype, position, total);
+
+      return {
+        ...slide,
+        role,
+        emphasis: slide.emphasis || fallbackEmphasis(role),
+        visualPriority: slide.visualPriority || fallbackVisualPriority(archetype, role),
+        badge: slide.badge || null,
+        highlight: slide.highlight || null,
+        secondaryHeadline: slide.secondaryHeadline || null,
+        secondaryBody: slide.secondaryBody || null,
+      };
+    }),
+  };
 }
 
 export async function generateContent(formData: FormData) {
@@ -80,13 +197,13 @@ export async function generateContent(formData: FormData) {
 
   const formatInstruction =
     type === "carousel"
-      ? "Crie exatamente 7 slides. O slide 1 é a capa/hook e o slide 7 fecha com CTA."
+      ? "Crie exatamente 7 slides. Os 7 slides precisam formar uma narrativa visual: não repita a mesma função em todos."
       : type === "post"
-        ? "Crie exatamente 1 slide com uma headline curta e uma ideia visual/textual de apoio."
+        ? "Crie exatamente 1 slide com função hook e uma ideia visual/textual forte."
         : "Não crie slides. O campo slides deve ser um array vazio. Entregue um roteiro de Reel claro, gravável e dividido em abertura, desenvolvimento e CTA.";
 
   const prompt = `
-Crie conteúdo para Instagram em português do Brasil.
+Crie conteúdo para Instagram em português do Brasil com padrão de direção criativa profissional.
 
 MARCA
 Nome: ${brand.name}
@@ -95,6 +212,7 @@ Público: ${brand.audience || "não informado"}
 Tom de voz: ${brand.tone || "não informado"}
 Proposta de valor: ${guidelines?.value_proposition || "não informada"}
 Pilares de conteúdo: ${(guidelines?.content_pillars || []).join(", ") || "não informados"}
+Direção visual informada pela marca: ${guidelines?.visual_direction || "não informada"}
 Palavras preferidas: ${(guidelines?.preferred_words || []).join(", ") || "nenhuma"}
 Palavras proibidas: ${(guidelines?.forbidden_words || []).join(", ") || "nenhuma"}
 CTA padrão: ${guidelines?.default_cta || "não informado"}
@@ -105,10 +223,39 @@ Formato: ${type}
 Objetivo: ${objective}
 Briefing: ${briefing}
 
+ESCOLHA UM ARQUÉTIPO
+- checklist: listas, erros, passos, dicas, frameworks e sequências práticas.
+- story: case, jornada, problema → tensão → virada → solução → resultado.
+- comparison: antes/depois, errado/certo, mito/verdade, A versus B.
+- product: produto, serviço, ambiente, showcase ou conteúdo em que a fotografia deve protagonizar.
+- authority: dados, pesquisas, tendências, análise e conteúdo de autoridade.
+- general: quando nenhum dos anteriores se encaixar bem.
+
+DIREÇÃO DE ARTE
+Escolha uma entre editorial, split ou minimal.
+- editorial: impacto, headline forte e narrativa.
+- split: contraste, comparação, imagem + texto.
+- minimal: informação premium, dados, respiro e sofisticação.
+
+PAPÉIS DOS SLIDES
+Use apenas: hook, second_hook, context, item, comparison, proof, transition, result, takeaway, cta, body.
+O slide 1 deve ser hook. Em carrossel, o último deve ser cta.
+O slide 2 deve ser forte o suficiente para funcionar como uma segunda entrada no conteúdo.
+
+CAMPOS VISUAIS
+- badge: rótulo curto, ex.: "ERRO 01", "ANTES", "DADO", "PASSO 2".
+- highlight: palavra, número ou pequena frase que merece protagonismo visual. Não invente números.
+- secondaryHeadline/secondaryBody: use principalmente em slides comparison para criar os dois lados da comparação.
+- emphasis: high, medium ou low.
+- visualPriority: text, image ou balanced.
+
 REGRAS
-- Não invente dados, números, depoimentos ou resultados específicos que não estejam no briefing.
+- Não invente dados, números, depoimentos, pesquisas ou resultados específicos que não estejam no briefing.
+- Se o conteúdo pedir autoridade mas não fornecer números confiáveis, use ideias e conceitos, não estatísticas inventadas.
 - Evite clichês e linguagem genérica de IA.
-- Priorize clareza, utilidade e uma abertura forte.
+- Cada slide deve acrescentar algo novo.
+- Headlines devem ser curtas o suficiente para uma arte de Instagram.
+- Evite parágrafos longos nos slides; detalhes adicionais podem ir para a legenda.
 - A legenda deve complementar o criativo, não apenas repetir os slides.
 - Hashtags devem ser específicas e sem "#".
 - ${formatInstruction}
@@ -122,23 +269,35 @@ Use exatamente estas chaves:
   "cta": "string",
   "hashtags": ["string"],
   "reelScript": "string",
+  "contentArchetype": "checklist|story|comparison|product|authority|general",
+  "artDirection": "editorial|split|minimal",
   "slides": [
-    { "headline": "string", "body": "string" }
+    {
+      "headline": "string",
+      "body": "string",
+      "role": "hook|second_hook|context|item|comparison|proof|transition|result|takeaway|cta|body",
+      "emphasis": "high|medium|low",
+      "visualPriority": "text|image|balanced",
+      "badge": "string ou null",
+      "highlight": "string ou null",
+      "secondaryHeadline": "string ou null",
+      "secondaryBody": "string ou null"
+    }
   ]
 }
 `.trim();
 
-  let generated: z.infer<typeof generatedContentSchema>;
+  let generated: ReturnType<typeof normalizeGenerated>;
 
   try {
     const result = await generateText({
       model: MODEL,
       prompt,
-      maxOutputTokens: 4000,
-
+      maxOutputTokens: 5000,
     });
 
-    generated = parseGeneratedContent(result.text);
+    const parsed = parseGeneratedContent(result.text);
+    generated = normalizeGenerated(parsed, briefing);
 
     if (type === "carousel" && generated.slides.length !== 7) {
       throw new Error(`Expected 7 slides, received ${generated.slides.length}`);
@@ -181,6 +340,8 @@ Use exatamente estas chaves:
       reel_script: generated.reelScript || null,
       briefing,
       objective,
+      content_archetype: generated.contentArchetype,
+      art_direction: generated.artDirection,
       status: "draft",
       created_by: user.id,
     })
@@ -199,6 +360,13 @@ Use exatamente estas chaves:
         position: index + 1,
         headline: slide.headline,
         body: slide.body,
+        slide_role: slide.role,
+        emphasis: slide.emphasis,
+        visual_priority: slide.visualPriority,
+        badge: slide.badge,
+        highlight: slide.highlight,
+        secondary_headline: slide.secondaryHeadline,
+        secondary_body: slide.secondaryBody,
       }))
     );
 

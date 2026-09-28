@@ -3,20 +3,52 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+type Archetype = "general" | "checklist" | "story" | "comparison" | "product" | "authority";
+type ArtDirection = "editorial" | "split" | "minimal";
+type SlideRole = "hook" | "second_hook" | "context" | "item" | "comparison" | "proof" | "transition" | "result" | "takeaway" | "cta" | "body";
+
 type VisualSlide = {
   id: string;
   position: number;
   headline: string | null;
   body: string | null;
+  slide_role?: SlideRole | null;
+  emphasis?: "high" | "medium" | "low" | null;
+  visual_priority?: "text" | "image" | "balanced" | null;
+  badge?: string | null;
+  highlight?: string | null;
+  secondary_headline?: string | null;
+  secondary_body?: string | null;
 };
 
-type TemplateId = "editorial" | "split" | "minimal";
-
-const templates: Array<{ id: TemplateId; label: string; description: string }> = [
-  { id: "editorial", label: "Editorial", description: "Foto full bleed, alto contraste e título grande" },
-  { id: "split", label: "Split", description: "Imagem destacada + bloco de texto com leitura rápida" },
-  { id: "minimal", label: "Minimal", description: "Composição clara, elegante e respirada" },
+const directions: Array<{ id: ArtDirection; label: string; description: string }> = [
+  { id: "editorial", label: "Editorial", description: "Narrativa forte, tipografia dominante e ritmo de revista" },
+  { id: "split", label: "Split", description: "Contraste, blocos, comparações e fotografia em destaque" },
+  { id: "minimal", label: "Minimal", description: "Dados, autoridade, sofisticação e bastante respiro" },
 ];
+
+const archetypeLabels: Record<Archetype, string> = {
+  general: "Conteúdo editorial",
+  checklist: "Checklist / Lista",
+  story: "Story / Case",
+  comparison: "Comparação",
+  product: "Produto / Foto-led",
+  authority: "Dados / Autoridade",
+};
+
+const roleLabels: Record<SlideRole, string> = {
+  hook: "HOOK",
+  second_hook: "2º HOOK",
+  context: "CONTEXTO",
+  item: "ITEM",
+  comparison: "COMPARAÇÃO",
+  proof: "PROVA",
+  transition: "VIRADA",
+  result: "RESULTADO",
+  takeaway: "INSIGHT",
+  cta: "CTA",
+  body: "CONTEÚDO",
+};
 
 function safeColor(value: string | null | undefined, fallback: string) {
   return /^#[0-9a-f]{6}$/i.test(value || "") ? String(value) : fallback;
@@ -32,12 +64,23 @@ function initials(value: string) {
     .toUpperCase();
 }
 
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number
-) {
+function fallbackRole(archetype: Archetype, position: number, total: number): SlideRole {
+  if (position === 1) return "hook";
+  if (position === total) return "cta";
+  if (archetype === "checklist") return position === 2 ? "second_hook" : "item";
+  if (archetype === "comparison") return position === 2 ? "second_hook" : "comparison";
+  if (archetype === "story") {
+    if (position === 2) return "context";
+    if (position === 4) return "transition";
+    if (position === 5) return "result";
+    if (position === 6) return "takeaway";
+  }
+  if (archetype === "authority") return position === 2 ? "context" : position >= total - 1 ? "takeaway" : "proof";
+  if (archetype === "product") return position === 2 ? "context" : position === total - 1 ? "proof" : "item";
+  return position === 2 ? "context" : "body";
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number) {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
@@ -48,10 +91,8 @@ function wrapText(
       current = next;
       continue;
     }
-
     if (current) lines.push(current);
     current = word;
-
     if (lines.length === maxLines - 1) break;
   }
 
@@ -60,13 +101,25 @@ function wrapText(
   const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
   if (consumed < words.length && lines.length) {
     let last = lines[lines.length - 1];
-    while (last && ctx.measureText(last + "…").width > maxWidth) {
-      last = last.slice(0, -1);
-    }
+    while (last && ctx.measureText(last + "…").width > maxWidth) last = last.slice(0, -1);
     lines[lines.length - 1] = last.trimEnd() + "…";
   }
 
   return lines;
+}
+
+function fillWrapped(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number
+) {
+  const lines = wrapText(ctx, text, maxWidth, maxLines);
+  lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
+  return lines.length;
 }
 
 async function loadBitmap(url?: string | null) {
@@ -74,27 +127,27 @@ async function loadBitmap(url?: string | null) {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
-    const blob = await response.blob();
-    return await createImageBitmap(blob);
+    return await createImageBitmap(await response.blob());
   } catch {
     return null;
   }
 }
 
-function drawCover(
-  ctx: CanvasRenderingContext2D,
-  image: ImageBitmap,
-  x: number,
-  y: number,
-  width: number,
-  height: number
-) {
+function drawCover(ctx: CanvasRenderingContext2D, image: ImageBitmap, x: number, y: number, width: number, height: number) {
   const scale = Math.max(width / image.width, height / image.height);
   const sourceWidth = width / scale;
   const sourceHeight = height / scale;
-  const sourceX = (image.width - sourceWidth) / 2;
-  const sourceY = (image.height - sourceHeight) / 2;
-  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  ctx.drawImage(
+    image,
+    (image.width - sourceWidth) / 2,
+    (image.height - sourceHeight) / 2,
+    sourceWidth,
+    sourceHeight,
+    x,
+    y,
+    width,
+    height
+  );
 }
 
 function drawLogo(
@@ -131,12 +184,25 @@ function drawLogo(
   ctx.restore();
 }
 
+function drawPill(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, background: string, foreground: string) {
+  ctx.font = "800 24px Arial";
+  const width = Math.min(350, ctx.measureText(text).width + 42);
+  ctx.fillStyle = background;
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, 52, 26);
+  ctx.fill();
+  ctx.fillStyle = foreground;
+  ctx.fillText(text, x + 21, y + 13);
+}
+
 export function VisualCarousel({
   brandName,
   primaryColor,
   secondaryColor,
   logoUrl,
   heroImageUrl,
+  contentArchetype = "general",
+  artDirection = "editorial",
   slides,
 }: {
   brandName: string;
@@ -144,15 +210,25 @@ export function VisualCarousel({
   secondaryColor?: string | null;
   logoUrl?: string | null;
   heroImageUrl?: string | null;
+  contentArchetype?: Archetype | null;
+  artDirection?: ArtDirection | null;
   slides: VisualSlide[];
 }) {
-  const [template, setTemplate] = useState<TemplateId>("editorial");
+  const archetype: Archetype = contentArchetype || "general";
+  const initialDirection: ArtDirection = directions.some((item) => item.id === artDirection)
+    ? (artDirection as ArtDirection)
+    : "editorial";
+
+  const [direction, setDirection] = useState<ArtDirection>(initialDirection);
   const [index, setIndex] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
   const primary = safeColor(primaryColor, "#6d4aff");
   const secondary = safeColor(secondaryColor, "#171923");
   const current = slides[index] || slides[0];
+  const role = current
+    ? current.slide_role || fallbackRole(archetype, current.position, slides.length)
+    : "body";
 
   const cssVars = useMemo(
     () =>
@@ -169,144 +245,179 @@ export function VisualCarousel({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const width = 1080;
-    const height = 1350;
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = 1080;
+    canvas.height = 1350;
 
-    const [hero, logo] = await Promise.all([
-      loadBitmap(heroImageUrl),
-      loadBitmap(logoUrl),
-    ]);
-
+    const [hero, logo] = await Promise.all([loadBitmap(heroImageUrl), loadBitmap(logoUrl)]);
     const headline = current.headline || "";
     const body = current.body || "";
+    const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
     const number = String(current.position).padStart(2, "0");
     const total = String(slides.length).padStart(2, "0");
     const brandInitials = initials(brandName);
+    const badge = current.badge || roleLabels[slideRole];
 
     ctx.textBaseline = "top";
 
-    if (template === "editorial") {
+    // Base art direction.
+    if (direction === "editorial") {
       ctx.fillStyle = primary;
-      ctx.fillRect(0, 0, width, height);
-
-      if (hero) {
-        drawCover(ctx, hero, 0, 0, width, height);
-        const gradient = ctx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, "rgba(0,0,0,.16)");
-        gradient.addColorStop(0.45, "rgba(0,0,0,.34)");
-        gradient.addColorStop(1, "rgba(0,0,0,.84)");
+      ctx.fillRect(0, 0, 1080, 1350);
+      if (hero && (current.visual_priority === "image" || current.visual_priority === "balanced" || slideRole === "hook")) {
+        drawCover(ctx, hero, 0, 0, 1080, 1350);
+        const gradient = ctx.createLinearGradient(0, 0, 0, 1350);
+        gradient.addColorStop(0, "rgba(7,7,12,.15)");
+        gradient.addColorStop(.45, "rgba(7,7,12,.38)");
+        gradient.addColorStop(1, "rgba(7,7,12,.9)");
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, 1080, 1350);
       }
-
       ctx.fillStyle = primary;
-      ctx.fillRect(0, 0, width, 20);
-
-      drawLogo(ctx, logo, brandInitials, 82, 74, 74, "rgba(255,255,255,.18)", "#ffffff");
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "800 30px Arial";
-      ctx.fillText(brandName.toUpperCase(), 178, 94);
-
-      ctx.globalAlpha = 0.12;
-      ctx.font = "900 340px Arial";
-      ctx.fillText(number, 735, 65);
-      ctx.globalAlpha = 1;
-
-      ctx.font = "900 82px Arial";
-      const titleLines = wrapText(ctx, headline, 900, 5);
-      const titleY = hero ? 650 : 410;
-      titleLines.forEach((line, i) => ctx.fillText(line, 82, titleY + i * 94));
-
-      ctx.font = "400 33px Arial";
-      ctx.fillStyle = "rgba(255,255,255,.82)";
-      const bodyLines = wrapText(ctx, body, 900, 5);
-      const bodyStart = Math.min(1090, titleY + 38 + titleLines.length * 94);
-      bodyLines.forEach((line, i) => ctx.fillText(line, 82, bodyStart + i * 45));
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "800 25px Arial";
-      ctx.fillText(number + " / " + total, 82, 1245);
-    }
-
-    if (template === "split") {
+      ctx.fillRect(0, 0, 1080, 18);
+    } else if (direction === "split") {
       ctx.fillStyle = secondary;
-      ctx.fillRect(0, 0, width, height);
-
-      if (hero) {
-        drawCover(ctx, hero, 0, 0, width, 500);
-        ctx.fillStyle = "rgba(0,0,0,.12)";
-        ctx.fillRect(0, 0, width, 500);
-      } else {
-        ctx.fillStyle = primary;
-        ctx.fillRect(0, 0, width, 500);
-      }
-
-      drawLogo(ctx, logo, brandInitials, 78, 68, 70, "rgba(255,255,255,.18)", "#ffffff");
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "800 28px Arial";
-      ctx.fillText(brandName.toUpperCase(), 170, 88);
-
+      ctx.fillRect(0, 0, 1080, 1350);
       ctx.fillStyle = primary;
-      ctx.fillRect(76, 555, 155, 10);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "900 72px Arial";
-      const titleLines = wrapText(ctx, headline, 910, 5);
-      titleLines.forEach((line, i) => ctx.fillText(line, 76, 620 + i * 84));
-
-      ctx.fillStyle = "rgba(255,255,255,.72)";
-      ctx.font = "400 31px Arial";
-      const bodyLines = wrapText(ctx, body, 910, 6);
-      const bodyStart = Math.min(1090, 665 + titleLines.length * 84);
-      bodyLines.forEach((line, i) => ctx.fillText(line, 76, bodyStart + i * 43));
-
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "800 25px Arial";
-      ctx.fillText(number + " / " + total, 76, 1245);
-    }
-
-    if (template === "minimal") {
+      ctx.fillRect(0, 0, 1080, slideRole === "comparison" ? 180 : 430);
+      if (hero && current.visual_priority !== "text" && slideRole !== "comparison") {
+        drawCover(ctx, hero, 0, 0, 1080, 430);
+        ctx.fillStyle = "rgba(0,0,0,.18)";
+        ctx.fillRect(0, 0, 1080, 430);
+      }
+    } else {
       ctx.fillStyle = "#f8f8f5";
-      ctx.fillRect(0, 0, width, height);
-
+      ctx.fillRect(0, 0, 1080, 1350);
       ctx.fillStyle = primary;
       ctx.fillRect(72, 72, 12, 1206);
-
-      drawLogo(ctx, logo, brandInitials, 130, 78, 74, primary, "#ffffff");
-
-      ctx.fillStyle = secondary;
-      ctx.font = "800 28px Arial";
-      ctx.fillText(brandName.toUpperCase(), 226, 99);
-
-      ctx.fillStyle = primary;
-      ctx.font = "800 25px Arial";
-      ctx.fillText(number + " / " + total, 862, 100);
-
-      if (hero) {
+      if (hero && current.visual_priority === "image") {
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(520, 210, 430, 390, 34);
+        ctx.roundRect(500, 205, 455, 385, 30);
         ctx.clip();
-        drawCover(ctx, hero, 520, 210, 430, 390);
+        drawCover(ctx, hero, 500, 205, 455, 385);
         ctx.restore();
       }
-
-      ctx.fillStyle = secondary;
-      ctx.font = "900 72px Arial";
-      const titleWidth = hero ? 365 : 820;
-      const titleLines = wrapText(ctx, headline, titleWidth, hero ? 6 : 5);
-      titleLines.forEach((line, i) => ctx.fillText(line, 130, 260 + i * 83));
-
-      ctx.font = "400 31px Arial";
-      ctx.fillStyle = "#626572";
-      const bodyLines = wrapText(ctx, body, 820, 7);
-      const bodyStart = hero ? 720 : Math.min(850, 310 + titleLines.length * 83);
-      bodyLines.forEach((line, i) => ctx.fillText(line, 130, bodyStart + i * 44));
     }
+
+    const light = direction !== "minimal";
+    const mainText = light ? "#ffffff" : secondary;
+    const softText = light ? "rgba(255,255,255,.76)" : "#636674";
+    const pillBg = light ? "rgba(255,255,255,.16)" : primary;
+    const pillText = "#ffffff";
+
+    drawLogo(ctx, logo, brandInitials, 78, 68, 68, pillBg, pillText);
+    ctx.fillStyle = mainText;
+    ctx.font = "800 28px Arial";
+    ctx.fillText(brandName.toUpperCase(), 166, 88);
+    drawPill(ctx, badge.toUpperCase(), 78, 170, pillBg, pillText);
+
+    ctx.fillStyle = light ? "rgba(255,255,255,.16)" : primary;
+    ctx.font = "900 160px Arial";
+    ctx.fillText(number, 825, 55);
+
+    // Role-aware composition.
+    if (slideRole === "hook" || slideRole === "second_hook") {
+      ctx.fillStyle = mainText;
+      ctx.font = "900 88px Arial";
+      const y = direction === "split" ? 555 : hero && direction === "editorial" ? 650 : 430;
+      const lines = fillWrapped(ctx, headline, 78, y, 920, 98, 5);
+      if (body) {
+        ctx.fillStyle = softText;
+        ctx.font = "400 32px Arial";
+        fillWrapped(ctx, body, 78, y + lines * 98 + 28, 900, 45, 4);
+      }
+    } else if (slideRole === "item") {
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.arc(160, 585, 78, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.font = "900 58px Arial";
+      ctx.fillText(number, 160, 552);
+      ctx.textAlign = "left";
+
+      ctx.fillStyle = mainText;
+      ctx.font = "900 66px Arial";
+      const lines = fillWrapped(ctx, headline, 280, 500, 690, 77, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 31px Arial";
+      fillWrapped(ctx, body, 280, 520 + lines * 77, 690, 43, 6);
+    } else if (slideRole === "comparison") {
+      const leftTitle = headline || "Antes";
+      const rightTitle = current.secondary_headline || current.highlight || "Depois";
+      const leftBody = body || "";
+      const rightBody = current.secondary_body || "";
+
+      const top = 410;
+      ctx.fillStyle = direction === "minimal" ? "#ffffff" : "rgba(255,255,255,.09)";
+      ctx.beginPath(); ctx.roundRect(70, top, 445, 650, 30); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(565, top, 445, 650, 30); ctx.fill();
+
+      ctx.fillStyle = light ? "#ffb9bf" : "#a24650";
+      ctx.font = "900 26px Arial";
+      ctx.fillText("ANTES / ERRADO", 105, top + 45);
+      ctx.fillStyle = mainText;
+      ctx.font = "900 52px Arial";
+      const l = fillWrapped(ctx, leftTitle, 105, top + 105, 365, 62, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 28px Arial";
+      fillWrapped(ctx, leftBody, 105, top + 135 + l * 62, 365, 39, 7);
+
+      ctx.fillStyle = direction === "minimal" ? primary : "#a8f0d3";
+      ctx.font = "900 26px Arial";
+      ctx.fillText("DEPOIS / CERTO", 600, top + 45);
+      ctx.fillStyle = mainText;
+      ctx.font = "900 52px Arial";
+      const r = fillWrapped(ctx, rightTitle, 600, top + 105, 365, 62, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 28px Arial";
+      fillWrapped(ctx, rightBody, 600, top + 135 + r * 62, 365, 39, 7);
+    } else if (slideRole === "proof" || slideRole === "result") {
+      if (current.highlight) {
+        ctx.fillStyle = direction === "minimal" ? primary : "#ffffff";
+        ctx.font = "900 112px Arial";
+        fillWrapped(ctx, current.highlight, 78, 420, 900, 120, 2);
+      }
+      ctx.fillStyle = mainText;
+      ctx.font = "900 64px Arial";
+      const y = current.highlight ? 680 : 470;
+      const lines = fillWrapped(ctx, headline, 78, y, 900, 75, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 31px Arial";
+      fillWrapped(ctx, body, 78, y + lines * 75 + 25, 900, 43, 6);
+    } else if (slideRole === "cta") {
+      ctx.fillStyle = mainText;
+      ctx.font = "900 82px Arial";
+      const lines = fillWrapped(ctx, headline, 78, 470, 900, 94, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 32px Arial";
+      fillWrapped(ctx, body, 78, 500 + lines * 94, 860, 45, 5);
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.roundRect(78, 1050, 490, 92, 46);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 30px Arial";
+      ctx.fillText("CONTINUE / SALVE / COMPARTILHE →", 112, 1080);
+    } else {
+      if (current.highlight) {
+        ctx.fillStyle = direction === "minimal" ? primary : "rgba(255,255,255,.92)";
+        ctx.font = "900 76px Arial";
+        fillWrapped(ctx, current.highlight, 78, 405, 850, 88, 2);
+      }
+      ctx.fillStyle = mainText;
+      ctx.font = "900 64px Arial";
+      const start = current.highlight ? 650 : 465;
+      const lines = fillWrapped(ctx, headline, 78, start, 900, 75, 4);
+      ctx.fillStyle = softText;
+      ctx.font = "400 31px Arial";
+      fillWrapped(ctx, body, 78, start + lines * 75 + 24, 900, 43, 7);
+    }
+
+    ctx.fillStyle = light ? "rgba(255,255,255,.85)" : primary;
+    ctx.font = "800 24px Arial";
+    ctx.fillText(number + " / " + total, 78, 1245);
   }
 
   async function downloadCurrentSlide() {
@@ -323,34 +434,33 @@ export function VisualCarousel({
     }
   }
 
-  const heroStyle = heroImageUrl
-    ? ({ backgroundImage: `url("${heroImageUrl}")` } as CSSProperties)
-    : undefined;
-
-  const logoStyle = logoUrl
-    ? ({ backgroundImage: `url("${logoUrl}")` } as CSSProperties)
-    : undefined;
+  const heroStyle = heroImageUrl ? ({ backgroundImage: `url("${heroImageUrl}")` } as CSSProperties) : undefined;
+  const logoStyle = logoUrl ? ({ backgroundImage: `url("${logoUrl}")` } as CSSProperties) : undefined;
+  const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
 
   return (
-    <article className="panel visualStudio" style={cssVars}>
+    <article className="panel visualStudio professionalStudio" style={cssVars}>
       <div className="visualStudioHead">
         <div>
-          <span className="eyebrow">ESTÚDIO VISUAL</span>
-          <h2>Artes do conteúdo</h2>
-          <p>Templates usam automaticamente cores, logo e imagem de apoio da marca/conteúdo.</p>
+          <span className="eyebrow">DIREÇÃO CRIATIVA</span>
+          <div className="creativeTitleRow">
+            <h2>{archetypeLabels[archetype]}</h2>
+            <span className="archetypeBadge">{roleLabels[displayRole]}</span>
+          </div>
+          <p>O layout muda conforme a função do slide. Direção recomendada pela IA: <b>{artDirection || "editorial"}</b>.</p>
         </div>
         <button className="secondaryBtn visualDownload" type="button" onClick={downloadCurrentSlide} disabled={downloading}>
           {downloading ? "Preparando PNG..." : "Baixar slide PNG ↓"}
         </button>
       </div>
 
-      <div className="templatePicker" aria-label="Escolher template visual">
-        {templates.map((item) => (
+      <div className="templatePicker directionPicker" aria-label="Escolher direção de arte">
+        {directions.map((item) => (
           <button
             type="button"
             key={item.id}
-            className={template === item.id ? "templateOption active" : "templateOption"}
-            onClick={() => setTemplate(item.id)}
+            className={direction === item.id ? "templateOption active" : "templateOption"}
+            onClick={() => setDirection(item.id)}
           >
             <b>{item.label}</b>
             <small>{item.description}</small>
@@ -359,58 +469,61 @@ export function VisualCarousel({
       </div>
 
       <div className="visualWorkspace">
-        <button
-          className="visualNav"
-          type="button"
-          onClick={() => setIndex((value) => (value - 1 + slides.length) % slides.length)}
-          aria-label="Slide anterior"
-        >
-          ←
-        </button>
+        <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
-        <div className={`visualCanvas ${template} ${heroImageUrl ? "hasHero" : ""}`}>
-          {heroImageUrl && <div className="visualHeroLayer" style={heroStyle} />}
+        <div className={`visualCanvas proCanvas ${direction} role-${displayRole} priority-${current.visual_priority || "balanced"} ${heroImageUrl ? "hasHero" : ""}`}>
+          {heroImageUrl && current.visual_priority !== "text" && <div className="visualHeroLayer" style={heroStyle} />}
+
           <div className="visualTop">
             <span className="visualBrandName">
-              <i className={logoUrl ? "visualLogo hasImage" : "visualLogo"} style={logoStyle}>
-                {!logoUrl && initials(brandName)}
-              </i>
+              <i className={logoUrl ? "visualLogo hasImage" : "visualLogo"} style={logoStyle}>{!logoUrl && initials(brandName)}</i>
               <em>{brandName}</em>
             </span>
-            <b>{String(current.position).padStart(2, "0")}</b>
+            <span className="roleChip">{current.badge || roleLabels[displayRole]}</span>
           </div>
-          <div className="visualCopy">
-            <h3>{current.headline}</h3>
-            {current.body && <p>{current.body}</p>}
-          </div>
+
+          {displayRole === "comparison" ? (
+            <div className="comparisonPreview">
+              <div className="compareSide bad">
+                <small>ANTES / ERRADO</small>
+                <h3>{current.headline}</h3>
+                <p>{current.body}</p>
+              </div>
+              <div className="compareSide good">
+                <small>DEPOIS / CERTO</small>
+                <h3>{current.secondary_headline || current.highlight || "Melhor caminho"}</h3>
+                <p>{current.secondary_body || "Aplique a alternativa recomendada para melhorar o resultado."}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="visualCopy roleAwareCopy">
+              {current.highlight && <strong className="visualHighlight">{current.highlight}</strong>}
+              {displayRole === "item" && <span className="itemNumber">{String(current.position - 2).padStart(2, "0")}</span>}
+              <h3>{current.headline}</h3>
+              {current.body && <p>{current.body}</p>}
+              {displayRole === "cta" && <span className="ctaVisual">Continue →</span>}
+            </div>
+          )}
+
           <div className="visualFooter">
             <span>{initials(brandName)}</span>
             <small>{String(current.position).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}</small>
           </div>
         </div>
 
-        <button
-          className="visualNav"
-          type="button"
-          onClick={() => setIndex((value) => (value + 1) % slides.length)}
-          aria-label="Próximo slide"
-        >
-          →
-        </button>
+        <button className="visualNav" type="button" onClick={() => setIndex((v) => (v + 1) % slides.length)} aria-label="Próximo slide">→</button>
       </div>
 
-      <div className="visualThumbs">
-        {slides.map((slide, slideIndex) => (
-          <button
-            key={slide.id}
-            type="button"
-            className={slideIndex === index ? "visualThumb active" : "visualThumb"}
-            onClick={() => setIndex(slideIndex)}
-            aria-label={`Abrir slide ${slide.position}`}
-          >
-            {String(slide.position).padStart(2, "0")}
-          </button>
-        ))}
+      <div className="visualThumbs professionalThumbs">
+        {slides.map((slide, slideIndex) => {
+          const thumbRole = slide.slide_role || fallbackRole(archetype, slide.position, slides.length);
+          return (
+            <button key={slide.id} type="button" className={slideIndex === index ? "visualThumb active" : "visualThumb"} onClick={() => setIndex(slideIndex)}>
+              <b>{String(slide.position).padStart(2, "0")}</b>
+              <small>{roleLabels[thumbRole]}</small>
+            </button>
+          );
+        })}
       </div>
     </article>
   );
