@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 
 function cleanHandle(value: string) {
@@ -11,7 +12,7 @@ function cleanHandle(value: string) {
 }
 
 async function resolveClientId(
-  supabase: Awaited<ReturnType<typeof getWorkspaceContext>>["supabase"],
+  supabase: SupabaseClient,
   workspaceId: string,
   requestedClientId: string
 ) {
