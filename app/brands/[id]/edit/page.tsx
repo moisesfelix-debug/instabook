@@ -61,7 +61,7 @@ export default async function EditBrandPage({
 
       <article className="panel assetPanel">
         <div className="assetPreview logoAssetPreview" style={logoUrl ? { backgroundImage: `url("${logoUrl}")` } : undefined}>
-          {!logoUrl && <span>{brand.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>}
+          {!logoUrl && <span>{brand.name.split(" ").map((part: string) => part[0]).slice(0, 2).join("").toUpperCase()}</span>}
         </div>
         <div className="assetCopy">
           <span className="eyebrow">LOGO DA MARCA</span>
