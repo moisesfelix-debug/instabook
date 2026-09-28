@@ -5,6 +5,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
+import { generateAndStoreVisuals, type VisualSlideInput } from "@/lib/visual-generation";
 
 const MODEL = "openai/gpt-5.4-mini";
 
@@ -357,28 +358,35 @@ Use exatamente estas chaves:
     fail("O conteúdo foi gerado, mas não foi possível salvar o rascunho.");
   }
 
+  let savedSlides: VisualSlideInput[] = [];
+
   if (generated.slides.length > 0) {
-    const { error: slidesError } = await supabase.from("content_slides").insert(
-      generated.slides.map((slide, index) => ({
-        content_id: content.id,
-        workspace_id: workspace.id,
-        position: index + 1,
-        headline: slide.headline,
-        body: slide.body || null,
-        slide_role: slide.role,
-        emphasis: slide.emphasis,
-        visual_priority: slide.visualPriority,
-        badge: slide.badge,
-        highlight: slide.highlight,
-        secondary_headline: slide.secondaryHeadline,
-        secondary_body: slide.secondaryBody,
-      }))
-    );
+    const { data: insertedSlides, error: slidesError } = await supabase
+      .from("content_slides")
+      .insert(
+        generated.slides.map((slide, index) => ({
+          content_id: content.id,
+          workspace_id: workspace.id,
+          position: index + 1,
+          headline: slide.headline,
+          body: slide.body || null,
+          slide_role: slide.role,
+          emphasis: slide.emphasis,
+          visual_priority: slide.visualPriority,
+          badge: slide.badge,
+          highlight: slide.highlight,
+          secondary_headline: slide.secondaryHeadline,
+          secondary_body: slide.secondaryBody,
+        }))
+      )
+      .select("id,position,headline,body,slide_role,visual_priority,image_path");
 
     if (slidesError) {
       await supabase.from("contents").delete().eq("id", content.id);
       fail("Não foi possível salvar os slides gerados.");
     }
+
+    savedSlides = insertedSlides || [];
   }
 
   await supabase.from("ai_generations").insert({
@@ -391,7 +399,47 @@ Use exatamente estas chaves:
     result_json: generated,
   });
 
+  let generatedVisuals = 0;
+
+  if ((type === "carousel" || type === "post") && savedSlides.length > 0) {
+    try {
+      const visualResult = await generateAndStoreVisuals({
+        supabase,
+        workspaceId: workspace.id,
+        content: {
+          id: content.id,
+          content_archetype: generated.contentArchetype,
+          art_direction: generated.artDirection,
+        },
+        brand: {
+          name: brand.name,
+          segment: brand.segment || null,
+        },
+        guidelines: guidelines
+          ? {
+              primary_color: guidelines.primary_color || null,
+              secondary_color: guidelines.secondary_color || null,
+            }
+          : null,
+        slides: savedSlides,
+        maxVisuals: type === "post" ? 1 : 3,
+      });
+
+      generatedVisuals = visualResult.generatedCount;
+
+      if (visualResult.failedCount > 0) {
+        console.warn("instabook.auto_visual_generation_partial", {
+          contentId: content.id,
+          generatedCount: visualResult.generatedCount,
+          failedCount: visualResult.failedCount,
+        });
+      }
+    } catch (error) {
+      console.error("instabook.auto_visual_generation_failed", error);
+    }
+  }
+
   revalidatePath("/");
   revalidatePath("/library");
-  redirect(`/content/${content.id}`);
+  redirect(`/content/${content.id}?asset=auto&generated=${generatedVisuals}`);
 }

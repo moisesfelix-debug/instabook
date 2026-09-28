@@ -80,6 +80,8 @@ export default async function ContentPage({
     })
   );
 
+  const generatedVisualCount = visualSlides.filter((slide) => Boolean(slide.image_url)).length;
+
   return (
     <AppShell>
       <header>
@@ -93,7 +95,13 @@ export default async function ContentPage({
 
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
-      {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais gerados com IA e conectados ao carrossel.</div>}
+      {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais regenerados com IA.</div>}
+      {query.asset === "auto" && Number(query.generated || 0) > 0 && (
+        <div className="formAlert successAlert pageAlert">Conteúdo criado com {query.generated} visuais gerados automaticamente.</div>
+      )}
+      {query.asset === "auto" && Number(query.generated || 0) === 0 && (
+        <div className="formAlert errorAlert pageAlert">O conteúdo foi criado, mas os visuais automáticos não ficaram prontos. Você pode regenerá-los abaixo.</div>
+      )}
       {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
 
       {(slides || []).length > 0 && (
@@ -121,12 +129,14 @@ export default async function ContentPage({
         <article className="panel aiVisualPanel">
           <div>
             <span className="eyebrow">VISUAIS POR SLIDE</span>
-            <h2>Gerar imagens com IA</h2>
-            <p>O Diretor de Arte escolhe até 3 slides estratégicos e cria visuais diferentes para cada um, preservando o texto no nosso motor gráfico.</p>
+            <h2>{generatedVisualCount > 0 ? "Regenerar imagens com IA" : "Gerar imagens com IA"}</h2>
+            <p>{generatedVisualCount > 0
+              ? `${generatedVisualCount} visual(is) já estão conectados. Use esta opção se quiser novas versões para os slides estratégicos.`
+              : "O Diretor de Arte escolhe até 3 slides estratégicos e cria visuais diferentes para cada um, preservando o texto no nosso motor gráfico."}</p>
           </div>
           <form action={generateCarouselVisuals}>
             <input type="hidden" name="contentId" value={content.id} />
-            <SubmitButton className="cta" pendingLabel="Criando visuais...">Gerar visuais com IA ✦</SubmitButton>
+            <SubmitButton className="cta" pendingLabel="Criando visuais...">{generatedVisualCount > 0 ? "Regenerar visuais ✦" : "Gerar visuais com IA ✦"}</SubmitButton>
           </form>
         </article>
       )}
