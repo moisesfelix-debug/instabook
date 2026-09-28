@@ -109,7 +109,16 @@ REGRAS
     generated = result.object;
   } catch (error) {
     console.error("instabook.ai_generation_failed", error);
-    fail("A IA não conseguiu gerar o conteúdo agora. Se for a primeira tentativa, pode ser necessário habilitar o AI Gateway na Vercel.");
+    const message = error instanceof Error ? error.message : "";
+
+    if (
+      message.includes("valid credit card") ||
+      message.includes("customer_verification_required")
+    ) {
+      fail("O AI Gateway da Vercel está bloqueado até a conta validar um cartão. Depois disso, tente gerar novamente.");
+    }
+
+    fail("A IA não conseguiu gerar o conteúdo agora. Tente novamente em instantes.");
   }
 
   const { data: content, error: contentError } = await supabase
