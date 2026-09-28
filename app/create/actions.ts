@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 
-const MODEL = "inclusionai/ling-3.0-flash-free";
+const MODEL = "inclusionai/ling-3.0-flash";
 
 const generatedContentSchema = z.object({
   title: z.string().min(3).max(120),
@@ -135,6 +135,11 @@ Use exatamente estas chaves:
       model: MODEL,
       prompt,
       maxOutputTokens: 4000,
+      providerOptions: {
+        gateway: {
+          has: ["free"],
+        },
+      },
     });
 
     generated = parseGeneratedContent(result.text);
