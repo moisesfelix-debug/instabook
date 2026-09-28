@@ -6,12 +6,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { generateAndStoreVisuals, type VisualSlideInput } from "@/lib/visual-generation";
+import { isVisualFamily, suggestedVisualFamily, visualFamilyById, type VisualFamily } from "@/lib/visual-families";
 
 const MODEL = "openai/gpt-5.4-mini";
 
 const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
 const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);
 const visualStyleSchema = z.enum(["bold_performance", "clean_consulting", "human_editorial", "zine_collage", "sensory_product"]);
+const visualFamilySchema = z.enum(["pulse", "atlas", "margem", "orbit", "vitrine"]);
 const slideRoleSchema = z.enum(["hook", "second_hook", "context", "item", "comparison", "proof", "transition", "result", "takeaway", "cta", "body"]);
 const emphasisSchema = z.enum(["high", "medium", "low"]);
 const visualPrioritySchema = z.enum(["text", "image", "balanced"]);
@@ -26,6 +28,7 @@ const generatedContentSchema = z.object({
   contentArchetype: archetypeSchema.optional(),
   artDirection: artDirectionSchema.optional(),
   visualStyle: visualStyleSchema.optional(),
+  visualFamily: visualFamilySchema.optional(),
   slides: z.array(
     z.object({
       headline: z.string().max(140),
@@ -87,14 +90,6 @@ function suggestedDirection(archetype: Archetype): ArtDirection {
   return "editorial";
 }
 
-function suggestedStyle(archetype: Archetype): VisualStyle {
-  if (archetype === "checklist" || archetype === "comparison") return "bold_performance";
-  if (archetype === "authority") return "clean_consulting";
-  if (archetype === "product") return "sensory_product";
-  if (archetype === "story") return "human_editorial";
-  return "human_editorial";
-}
-
 function fallbackRole(archetype: Archetype, position: number, total: number): SlideRole {
   if (position === 1) return "hook";
   if (position === total) return "cta";
@@ -151,21 +146,24 @@ function normalizeGenerated(
   requested: {
     archetype: Archetype | null;
     artDirection: ArtDirection | null;
-    visualStyle: VisualStyle | null;
+    visualFamily: VisualFamily | null;
   }
 ) {
   const archetype =
     requested.archetype || generated.contentArchetype || inferArchetype(briefing, generated.title);
+  const visualFamily =
+    requested.visualFamily || generated.visualFamily || suggestedVisualFamily(archetype);
+  const family = visualFamilyById(visualFamily);
   const artDirection =
     requested.artDirection || generated.artDirection || suggestedDirection(archetype);
-  const visualStyle =
-    requested.visualStyle || generated.visualStyle || suggestedStyle(archetype);
+  const visualStyle: VisualStyle = family.internalStyle;
   const total = generated.slides.length;
 
   return {
     ...generated,
     contentArchetype: archetype,
     artDirection,
+    visualFamily,
     visualStyle,
     slides: generated.slides.map((slide, index) => {
       const position = index + 1;
@@ -197,18 +195,17 @@ export async function generateContent(formData: FormData) {
   const objective = String(formData.get("objective") || "educar");
   const archetypeInput = String(formData.get("archetype") || "auto");
   const artDirectionInput = String(formData.get("artDirection") || "auto");
-  const visualStyleInput = String(formData.get("visualStyle") || "auto");
+  const visualFamilyInput = String(formData.get("visualFamily") || "auto");
 
   const parsedArchetype = archetypeSchema.safeParse(archetypeInput);
   const parsedArtDirection = artDirectionSchema.safeParse(artDirectionInput);
-  const parsedVisualStyle = visualStyleSchema.safeParse(visualStyleInput);
 
   const requestedArchetype =
     archetypeInput === "auto" ? null : parsedArchetype.success ? parsedArchetype.data : null;
   const requestedArtDirection =
     artDirectionInput === "auto" ? null : parsedArtDirection.success ? parsedArtDirection.data : null;
-  const requestedVisualStyle =
-    visualStyleInput === "auto" ? null : parsedVisualStyle.success ? parsedVisualStyle.data : null;
+  const requestedVisualFamily: VisualFamily | null =
+    visualFamilyInput === "auto" ? null : isVisualFamily(visualFamilyInput) ? visualFamilyInput : null;
 
   if (!brandId || briefing.length < 8) {
     fail("Escolha uma marca e descreva melhor a ideia do conteúdo.");
@@ -270,7 +267,7 @@ Briefing: ${briefing}
 DECISÕES DO USUÁRIO
 Arquétipo solicitado: ${requestedArchetype || "IA escolhe"}
 Direção estrutural solicitada: ${requestedArtDirection || "IA escolhe"}
-Estilo visual solicitado: ${requestedVisualStyle || "IA escolhe"}
+Família visual solicitada: ${requestedVisualFamily || "IA escolhe"}
 
 Se o usuário escolheu um valor específico acima, RESPEITE-O. Só escolha livremente quando estiver "IA escolhe".
 
@@ -288,15 +285,15 @@ Escolha uma entre editorial, split ou minimal.
 - split: contraste, comparação, imagem + texto.
 - minimal: informação premium, dados, respiro e sofisticação.
 
-ESTILO VISUAL
-Escolha um Style Pack:
-- bold_performance: alto contraste, marketing/growth, headlines fortes, números e energia.
-- clean_consulting: consultoria/B2B premium, grid organizado, respiro, credibilidade e sobriedade.
-- human_editorial: fotografia humana, linguagem de revista, sofisticação e narrativa.
-- zine_collage: recortes, textura, camadas, personalidade e estética autoral.
-- sensory_product: imagem protagonista, produto/comida/ambiente, textura e desejo visual.
+FAMÍLIAS VISUAIS
+Escolha uma família visual autoral:
+- pulse: energia, contraste, assimetria, headline forte, recortes gráficos e ritmo de campanha.
+- atlas: grid disciplinado, sofisticação editorial, autoridade, respiro, regras finas e acabamento premium.
+- margem: textura, papel, anotações, colagem sutil, linguagem humana e sensação autoral.
+- orbit: composição modular, geometria digital, contraste escuro/claro, precisão e estética tecnológica premium.
+- vitrine: imagem protagonista, desejo visual, acabamento de campanha, produto/ambiente e overlays elegantes.
 
-O Style Pack deve influenciar a linguagem do texto, a densidade dos slides e quais slides precisam de imagem.
+A família visual é uma decisão estrutural. Ela deve influenciar o tamanho das headlines, densidade de texto, uso de imagem, badges e ritmo do carrossel.
 
 PAPÉIS DOS SLIDES
 Use apenas: hook, second_hook, context, item, comparison, proof, transition, result, takeaway, cta, body.
@@ -332,7 +329,7 @@ Use exatamente estas chaves:
   "reelScript": "string",
   "contentArchetype": "checklist|story|comparison|product|authority|general",
   "artDirection": "editorial|split|minimal",
-  "visualStyle": "bold_performance|clean_consulting|human_editorial|zine_collage|sensory_product",
+  "visualFamily": "pulse|atlas|margem|orbit|vitrine",
   "slides": [
     {
       "headline": "string",
@@ -362,7 +359,7 @@ Use exatamente estas chaves:
     generated = normalizeGenerated(parsed, briefing, {
       archetype: requestedArchetype,
       artDirection: requestedArtDirection,
-      visualStyle: requestedVisualStyle,
+      visualFamily: requestedVisualFamily,
     });
 
     if (type === "carousel" && generated.slides.length !== 7) {
@@ -409,6 +406,7 @@ Use exatamente estas chaves:
       content_archetype: generated.contentArchetype,
       art_direction: generated.artDirection,
       visual_style: generated.visualStyle,
+      visual_family: generated.visualFamily,
       status: "draft",
       created_by: user.id,
     })
@@ -472,6 +470,7 @@ Use exatamente estas chaves:
           content_archetype: generated.contentArchetype,
           art_direction: generated.artDirection,
           visual_style: generated.visualStyle,
+          visual_family: generated.visualFamily,
         },
         brand: {
           name: brand.name,
@@ -484,7 +483,7 @@ Use exatamente estas chaves:
             }
           : null,
         slides: savedSlides,
-        maxVisuals: type === "post" ? 1 : 3,
+        maxVisuals: type === "post" ? 1 : generated.visualFamily === "vitrine" ? 4 : 3,
       });
 
       generatedVisuals = visualResult.generatedCount;

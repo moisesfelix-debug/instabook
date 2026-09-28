@@ -32,15 +32,20 @@ type VisualGuidelines = {
   secondary_color: string | null;
 };
 
-export function visualPlacement(slide: VisualSlideInput): VisualPlacement {
+export function visualPlacement(slide: VisualSlideInput, visualFamily = "atlas"): VisualPlacement {
   const role = slide.slide_role || "body";
 
   if (slide.position === 1 || role === "hook" || role === "second_hook") {
-    return "background";
+    return visualFamily === "atlas" ? "card" : "background";
   }
 
+  if (visualFamily === "vitrine") return "hero";
+  if (visualFamily === "orbit") return slide.visual_priority === "image" ? "hero" : "card";
+  if (visualFamily === "margem") return role === "item" ? "side" : "card";
+  if (visualFamily === "pulse") return slide.visual_priority === "image" ? "hero" : "side";
+
   if (slide.visual_priority === "image") return "hero";
-  if (role === "item") return "side";
+  if (role === "item") return "card";
   return "card";
 }
 
@@ -155,7 +160,7 @@ export async function generateAndStoreVisuals({
   const results = await Promise.allSettled(
     selected.map(async (slide) => {
       const role = slide.slide_role || "body";
-      const placement = visualPlacement(slide);
+      const placement = visualPlacement(slide, content.visual_family || "atlas");
       const prompt = buildSlideImagePrompt({
         brandName: brand.name,
         segment: brand.segment,

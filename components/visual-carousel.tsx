@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { visualFamilies, visualFamilyById, suggestedVisualFamily, type VisualFamily } from "@/lib/visual-families";
 
 type Archetype = "general" | "checklist" | "story" | "comparison" | "product" | "authority";
 type ArtDirection = "editorial" | "split" | "minimal";
@@ -90,14 +91,19 @@ function imagePlacement(
   slide: VisualSlide,
   role: SlideRole,
   archetype: Archetype,
-  style: VisualStyle
+  style: VisualStyle,
+  family: VisualFamily
 ): ImagePlacement {
   if (role === "comparison" || role === "cta") return "none";
-  if (role === "hook" || role === "second_hook") return "background";
+  if (role === "hook" || role === "second_hook") return family === "atlas" ? "card" : "background";
+  if (family === "vitrine") return "hero";
+  if (family === "orbit") return slide.visual_priority === "image" ? "hero" : "card";
+  if (family === "margem") return role === "item" ? "side" : "card";
+  if (family === "pulse") return slide.visual_priority === "image" ? "hero" : "side";
   if (archetype === "product" || style === "sensory_product" || slide.visual_priority === "image") return "hero";
-  if (role === "item") return style === "clean_consulting" ? "card" : "side";
+  if (role === "item") return "card";
   if (role === "proof" || role === "result") return "background";
-  return slide.visual_priority === "balanced" ? "side" : "background";
+  return slide.visual_priority === "balanced" ? "side" : "card";
 }
 
 const archetypeLabels: Record<Archetype, string> = {
@@ -277,6 +283,7 @@ export function VisualCarousel({
   contentArchetype = "general",
   artDirection = "editorial",
   visualStyle,
+  visualFamily,
   slides,
 }: {
   brandName: string;
@@ -287,6 +294,7 @@ export function VisualCarousel({
   contentArchetype?: Archetype | null;
   artDirection?: ArtDirection | null;
   visualStyle?: VisualStyle | null;
+  visualFamily?: VisualFamily | null;
   slides: VisualSlide[];
 }) {
   const archetype: Archetype = contentArchetype || "general";
@@ -294,13 +302,16 @@ export function VisualCarousel({
     ? (artDirection as ArtDirection)
     : "editorial";
 
-  const initialStyle: VisualStyle =
+  const initialFamily: VisualFamily =
+    visualFamily || suggestedVisualFamily(archetype);
+  const fallbackStyle: VisualStyle =
     visualStyle && stylePacks.some((item) => item.id === visualStyle)
       ? visualStyle
       : recommendedStyle(archetype);
 
   const [direction, setDirection] = useState<ArtDirection>(initialDirection);
-  const [style, setStyle] = useState<VisualStyle>(initialStyle);
+  const [family, setFamily] = useState<VisualFamily>(initialFamily);
+  const style: VisualStyle = (visualFamilyById(family)?.internalStyle || fallbackStyle) as VisualStyle;
   const [index, setIndex] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
@@ -332,7 +343,7 @@ export function VisualCarousel({
     const activeImageUrl = current.image_url || (current.visual_priority !== "text" ? heroImageUrl : null);
     const [hero, logo] = await Promise.all([loadBitmap(activeImageUrl), loadBitmap(logoUrl)]);
     const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
-    const placement = imagePlacement(current, slideRole, archetype, style);
+    const placement = imagePlacement(current, slideRole, archetype, style, family);
     const headline = displayHeadline(current, slideRole);
     const body = current.body || "";
     const number = String(current.position).padStart(2, "0");
@@ -343,8 +354,46 @@ export function VisualCarousel({
 
     ctx.textBaseline = "top";
 
-    // Base art direction. Images are visual assets; InstaBook owns typography and layout.
-    if (direction === "editorial") {
+    const familyIsLight = family === "atlas" || family === "margem";
+
+    // Family first, art direction second. The family defines the visual system.
+    if (family === "atlas") {
+      ctx.fillStyle = "#f6f2e9";
+      ctx.fillRect(0, 0, 1080, 1350);
+      ctx.strokeStyle = "rgba(84,73,62,.28)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(78, 175); ctx.lineTo(1002, 175); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(78, 1185); ctx.lineTo(1002, 1185); ctx.stroke();
+    } else if (family === "margem") {
+      ctx.fillStyle = "#fffaf1";
+      ctx.fillRect(0, 0, 1080, 1350);
+      ctx.strokeStyle = "rgba(115,155,175,.16)";
+      ctx.lineWidth = 1;
+      for (let y = 150; y < 1270; y += 64) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1080, y); ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(224,94,75,.34)";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(112, 0); ctx.lineTo(112, 1350); ctx.stroke();
+    } else if (family === "orbit") {
+      ctx.fillStyle = "#0d1324";
+      ctx.fillRect(0, 0, 1080, 1350);
+      ctx.strokeStyle = "rgba(113,132,195,.13)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < 1080; x += 90) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1350); ctx.stroke();
+      }
+      for (let y = 0; y < 1350; y += 90) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1080, y); ctx.stroke();
+      }
+      ctx.fillStyle = primary;
+      ctx.fillRect(0, 0, 1080, 12);
+    } else if (family === "vitrine") {
+      ctx.fillStyle = "#24181a";
+      ctx.fillRect(0, 0, 1080, 1350);
+      ctx.fillStyle = primary;
+      ctx.fillRect(0, 0, 1080, 12);
+    } else if (direction === "editorial") {
       ctx.fillStyle = primary;
       ctx.fillRect(0, 0, 1080, 1350);
       ctx.fillStyle = primary;
@@ -398,10 +447,19 @@ export function VisualCarousel({
     }
 
     const light = direction !== "minimal";
-    const darkImageBackground = Boolean(hero && placement === "background" && direction !== "minimal");
-    const mainText = darkImageBackground || light ? "#ffffff" : secondary;
-    const softText = darkImageBackground || light ? "rgba(255,255,255,.78)" : "#636674";
-    const pillBg = darkImageBackground || light ? "rgba(255,255,255,.16)" : primary;
+    const darkImageBackground = Boolean(hero && placement === "background" && !familyIsLight);
+    const mainText =
+      family === "atlas" || family === "margem"
+        ? secondary
+        : darkImageBackground || light ? "#ffffff" : secondary;
+    const softText =
+      family === "atlas" || family === "margem"
+        ? "#66646a"
+        : darkImageBackground || light ? "rgba(255,255,255,.78)" : "#636674";
+    const pillBg =
+      family === "atlas" || family === "margem"
+        ? primary
+        : darkImageBackground || light ? "rgba(255,255,255,.16)" : primary;
     const pillText = "#ffffff";
 
     drawLogo(ctx, logo, brandInitials, 78, 68, 68, pillBg, pillText);
@@ -417,7 +475,7 @@ export function VisualCarousel({
     // Role-aware composition.
     if (slideRole === "hook" || slideRole === "second_hook") {
       ctx.fillStyle = mainText;
-      ctx.font = "900 88px Arial";
+      ctx.font = family === "atlas" ? "700 86px Georgia" : family === "margem" ? "700 82px Georgia" : "900 88px Arial";
       const y = direction === "split" ? 555 : hero && direction === "editorial" ? 650 : 430;
       const lines = fillWrapped(ctx, headline, 78, y, 920, 98, 5);
       if (body) {
@@ -444,7 +502,7 @@ export function VisualCarousel({
       }
 
       ctx.fillStyle = mainText;
-      ctx.font = "900 66px Arial";
+      ctx.font = family === "atlas" ? "700 62px Georgia" : family === "margem" ? "700 60px Georgia" : "900 66px Arial";
       const lines = fillWrapped(ctx, headline, textX, 500, textWidth, 77, 4);
       ctx.fillStyle = softText;
       ctx.font = "400 31px Arial";
@@ -541,7 +599,7 @@ export function VisualCarousel({
   }
 
   const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
-  const placement = imagePlacement(current, displayRole, archetype, style);
+  const placement = imagePlacement(current, displayRole, archetype, style, family);
   const activeImageUrl =
     current.image_url || (current.visual_priority !== "text" ? heroImageUrl : null);
   const heroStyle = activeImageUrl ? ({ backgroundImage: `url("${activeImageUrl}")` } as CSSProperties) : undefined;
@@ -559,7 +617,7 @@ export function VisualCarousel({
             <h2>{archetypeLabels[archetype]}</h2>
             <span className="archetypeBadge">{roleLabels[displayRole]}</span>
           </div>
-          <p>O layout muda conforme a função do slide. Estrutura: <b>{artDirection || "editorial"}</b> • Estilo inicial: <b>{visualStyle || initialStyle}</b>.</p>
+          <p>O layout muda conforme a função do slide. Estrutura: <b>{artDirection || "editorial"}</b> • Família: <b>{visualFamilyById(family).label}</b>.</p>
         </div>
         <button className="secondaryBtn visualDownload" type="button" onClick={downloadCurrentSlide} disabled={downloading}>
           {downloading ? "Preparando PNG..." : "Baixar slide PNG ↓"}
@@ -588,16 +646,16 @@ export function VisualCarousel({
 
       <div className="visualControlGroup styleControlGroup">
         <div className="visualControlLabel">
-          <span className="eyebrow">ESTILO VISUAL</span>
-          <small>Define a linguagem estética aplicada sobre a estrutura.</small>
+          <span className="eyebrow">FAMÍLIA VISUAL</span>
+          <small>Troque a linguagem visual sem alterar o conteúdo.</small>
         </div>
-        <div className="stylePackPicker" aria-label="Escolher estilo visual">
-          {stylePacks.map((item) => (
+        <div className="stylePackPicker familyInlinePicker" aria-label="Escolher família visual">
+          {visualFamilies.map((item) => (
             <button
               type="button"
               key={item.id}
-              className={style === item.id ? "stylePackOption active" : "stylePackOption"}
-              onClick={() => setStyle(item.id)}
+              className={family === item.id ? "stylePackOption active" : "stylePackOption"}
+              onClick={() => setFamily(item.id)}
             >
               <b>{item.label}</b>
               <small>{item.description}</small>
@@ -609,7 +667,7 @@ export function VisualCarousel({
       <div className="visualWorkspace">
         <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
-        <div className={`visualCanvas proCanvas ${direction} style-${style} role-${displayRole} priority-${current.visual_priority || "balanced"} image-${placement} ${activeImageUrl && placement !== "none" ? "hasHero" : ""}`}>
+        <div className={`visualCanvas proCanvas ${direction} style-${style} family-${family} role-${displayRole} priority-${current.visual_priority || "balanced"} image-${placement} ${activeImageUrl && placement !== "none" ? "hasHero" : ""}`}>
           {activeImageUrl && placement !== "none" && <div className="visualHeroLayer" style={heroStyle} />}
           {activeImageUrl && placement !== "none" && current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
 

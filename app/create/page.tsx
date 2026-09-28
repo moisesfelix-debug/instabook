@@ -3,6 +3,8 @@ import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { generateContent } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
+import { VisualFamilyPreview } from "@/components/visual-family-preview";
+import { visualFamilies } from "@/lib/visual-families";
 
 const archetypes = [
   { value: "auto", label: "IA escolhe", description: "Analisa o briefing e define a melhor estrutura." },
@@ -20,14 +22,7 @@ const directions = [
   { value: "minimal", label: "Minimal", description: "Respiro, dados e sofisticação." },
 ] as const;
 
-const visualStyles = [
-  { value: "auto", label: "IA escolhe", description: "Seleciona o pack mais coerente com a pauta." },
-  { value: "bold_performance", label: "Bold Performance", description: "Impacto, contraste e tipografia dominante." },
-  { value: "clean_consulting", label: "Clean Consulting", description: "Grid rigoroso e aparência B2B premium." },
-  { value: "human_editorial", label: "Human Editorial", description: "Fotografia e linguagem de revista." },
-  { value: "zine_collage", label: "Zine / Collage", description: "Recortes, camadas e personalidade." },
-  { value: "sensory_product", label: "Sensory Product", description: "Imagem protagonista e experiência visual." },
-] as const;
+
 
 export default async function CreatePage({
   searchParams,
@@ -131,13 +126,32 @@ export default async function CreatePage({
                   </div>
                 </fieldset>
 
-                <fieldset className="choiceFieldset">
-                  <legend>Estilo visual</legend>
-                  <div className="choiceGrid choiceGridStyle">
-                    {visualStyles.map((item) => (
-                      <label className="choiceCard styleChoiceCard" key={item.value}>
-                        <input type="radio" name="visualStyle" value={item.value} defaultChecked={item.value === "auto"} />
-                        <span><b>{item.label}</b><small>{item.description}</small></span>
+                <fieldset className="choiceFieldset familyFieldset">
+                  <legend>Família visual</legend>
+                  <p className="choiceHelper">Escolha pela aparência. O preview representa a linguagem que o motor vai usar nos slides.</p>
+                  <div className="familyChoiceGrid">
+                    <label className="familyChoiceCard">
+                      <input type="radio" name="visualFamily" value="auto" defaultChecked />
+                      <span className="familyChoiceInner">
+                        <VisualFamilyPreview family="auto" />
+                        <span className="familyChoiceMeta">
+                          <b>IA escolhe</b>
+                          <small>O Diretor Criativo seleciona a família mais coerente com a pauta.</small>
+                          <em>modo rápido</em>
+                        </span>
+                      </span>
+                    </label>
+                    {visualFamilies.map((item) => (
+                      <label className="familyChoiceCard" key={item.id}>
+                        <input type="radio" name="visualFamily" value={item.id} />
+                        <span className="familyChoiceInner">
+                          <VisualFamilyPreview family={item.id} />
+                          <span className="familyChoiceMeta">
+                            <b>{item.label}</b>
+                            <small>{item.description}</small>
+                            <em>{item.bestFor}</em>
+                          </span>
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -147,7 +161,7 @@ export default async function CreatePage({
               <SubmitButton className="cta full" pendingLabel="Criando conteúdo + visuais...">Gerar conteúdo completo ✦</SubmitButton>
             </form>
 
-            <p className="featureNote">GPT-5.4 Mini cria a estratégia e o texto; o Recraft gera os visuais de apoio já orientados pelo estilo escolhido.</p>
+            <p className="featureNote">A família visual orienta a copy, a composição e as imagens. Depois da geração, tudo continua editável.</p>
           </article>
 
           <article className="panel previewPanel generatorIntro">
