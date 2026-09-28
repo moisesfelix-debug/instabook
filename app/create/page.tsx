@@ -73,7 +73,7 @@ export default async function CreatePage({
 
               <button className="cta full" type="submit">Gerar e salvar rascunho ✦</button>
             </form>
-            <p className="featureNote">A primeira versão usa GPT-5.4 Mini via Vercel AI Gateway para equilibrar qualidade e custo.</p>
+            <p className="featureNote">Durante a fase de protótipo, a geração usa Ling 3.0 Flash Free via Vercel AI Gateway. O modelo de produção poderá ser trocado sem alterar o fluxo do produto.</p>
           </article>
 
           <article className="panel previewPanel generatorIntro">

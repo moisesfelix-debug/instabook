@@ -27,7 +27,7 @@ The project URL and publishable key may be used client-side because authorizatio
 
 
 ## 2026-09-28 — AI content engine
-Content generation uses Vercel AI Gateway through the AI SDK so production can rely on Vercel OIDC instead of storing a provider API key. The initial model is openai/gpt-5.4-mini to balance quality, latency and cost. Generations are structured, persisted as editable drafts, and tied to workspace/brand/user for auditability.
+Content generation uses Vercel AI Gateway through the AI SDK so production can rely on Vercel OIDC instead of storing a provider API key. The prototype model is inclusionai/ling-3.0-flash-free so the generation flow can be validated on Vercel's free routing tier. Production can later switch to a stronger paid model without changing the product flow. Generations are structured, persisted as editable drafts, and tied to workspace/brand/user for auditability.
 
 ## 2026-09-28 — Brand memory before visual templates
 Brand strategy and voice are persisted before visual-template automation: audience, tone, value proposition, content pillars, preferred/forbidden vocabulary, CTA and visual direction. This context is injected into every generation.

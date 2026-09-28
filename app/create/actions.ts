@@ -1,12 +1,12 @@
 "use server";
 
-import { generateObject } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 
-const MODEL = "openai/gpt-5.4-mini";
+const MODEL = "inclusionai/ling-3.0-flash-free";
 
 const generatedContentSchema = z.object({
   title: z.string().min(3).max(120),
@@ -25,6 +25,22 @@ const generatedContentSchema = z.object({
 
 function fail(message: string): never {
   redirect("/create?error=" + encodeURIComponent(message));
+}
+
+function parseGeneratedContent(text: string) {
+  const cleaned = text
+    .trim()
+    .replace(/^\`\`\`(?:json)?\s*/i, "")
+    .replace(/\s*\`\`\`$/i, "");
+
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("AI returned no JSON object");
+  }
+
+  return generatedContentSchema.parse(JSON.parse(cleaned.slice(start, end + 1)));
 }
 
 export async function generateContent(formData: FormData) {
@@ -67,7 +83,7 @@ export async function generateContent(formData: FormData) {
       ? "Crie exatamente 7 slides. O slide 1 é a capa/hook e o slide 7 fecha com CTA."
       : type === "post"
         ? "Crie exatamente 1 slide com uma headline curta e uma ideia visual/textual de apoio."
-        : "Não crie slides. Entregue um roteiro de Reel claro, gravável e dividido em abertura, desenvolvimento e CTA.";
+        : "Não crie slides. O campo slides deve ser um array vazio. Entregue um roteiro de Reel claro, gravável e dividido em abertura, desenvolvimento e CTA.";
 
   const prompt = `
 Crie conteúdo para Instagram em português do Brasil.
@@ -94,19 +110,44 @@ REGRAS
 - Evite clichês e linguagem genérica de IA.
 - Priorize clareza, utilidade e uma abertura forte.
 - A legenda deve complementar o criativo, não apenas repetir os slides.
-- Hashtags devem ser específicas e sem "#"; o sistema adicionará o símbolo depois.
+- Hashtags devem ser específicas e sem "#".
 - ${formatInstruction}
+
+RESPONDA SOMENTE COM JSON VÁLIDO, sem markdown, sem comentários e sem texto fora do JSON.
+Use exatamente estas chaves:
+{
+  "title": "string",
+  "hook": "string",
+  "caption": "string",
+  "cta": "string",
+  "hashtags": ["string"],
+  "reelScript": "string",
+  "slides": [
+    { "headline": "string", "body": "string" }
+  ]
+}
 `.trim();
 
   let generated: z.infer<typeof generatedContentSchema>;
 
   try {
-    const result = await generateObject({
+    const result = await generateText({
       model: MODEL,
-      schema: generatedContentSchema,
       prompt,
+      maxOutputTokens: 4000,
     });
-    generated = result.object;
+
+    generated = parseGeneratedContent(result.text);
+
+    if (type === "carousel" && generated.slides.length !== 7) {
+      throw new Error(`Expected 7 slides, received ${generated.slides.length}`);
+    }
+    if (type === "post" && generated.slides.length !== 1) {
+      throw new Error(`Expected 1 slide, received ${generated.slides.length}`);
+    }
+    if (type === "reel" && generated.slides.length !== 0) {
+      throw new Error(`Expected no slides, received ${generated.slides.length}`);
+    }
   } catch (error) {
     console.error("instabook.ai_generation_failed", error);
     const message = error instanceof Error ? error.message : "";
@@ -116,6 +157,10 @@ REGRAS
       message.includes("customer_verification_required")
     ) {
       fail("O AI Gateway da Vercel está bloqueado até a conta validar um cartão. Depois disso, tente gerar novamente.");
+    }
+
+    if (message.includes("Free tier users do not have access")) {
+      fail("O modelo configurado não está liberado no plano gratuito do AI Gateway.");
     }
 
     fail("A IA não conseguiu gerar o conteúdo agora. Tente novamente em instantes.");
