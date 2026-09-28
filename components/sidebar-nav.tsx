@@ -54,7 +54,7 @@ export function SidebarNav({
 
   return (
     <aside className="sidebar">
-      <Link href="/" className="brand">
+      <Link href="/" className="brand" prefetch={false}>
         <span className="mark">IB</span>
         <b>InstaBook</b>
       </Link>
@@ -71,7 +71,12 @@ export function SidebarNav({
         {items.map(([label, href]) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
-            <Link className={active ? "active" : ""} href={href} key={href}>
+            <Link
+              className={active ? "active" : ""}
+              href={href}
+              key={href}
+              prefetch={false}
+            >
               {label}
             </Link>
           );

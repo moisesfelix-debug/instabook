@@ -56,7 +56,7 @@ export default async function ContentPage({
           <h1>{content.title}</h1>
           <p>{statusLabels[content.status] || content.status} • gerado como rascunho editável.</p>
         </div>
-        <Link className="secondaryBtn" href="/library">← Biblioteca</Link>
+        <Link prefetch={false} className="secondaryBtn" href="/library">← Biblioteca</Link>
       </header>
 
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}

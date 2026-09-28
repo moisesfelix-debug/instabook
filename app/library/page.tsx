@@ -39,7 +39,7 @@ export default async function LibraryPage() {
     <AppShell>
       <header>
         <div><h1>Biblioteca</h1><p>Todos os rascunhos e conteúdos produzidos neste workspace.</p></div>
-        <Link className="cta" href="/create">＋ Criar conteúdo</Link>
+        <Link prefetch={false} className="cta" href="/create">＋ Criar conteúdo</Link>
       </header>
 
       {!contents || contents.length === 0 ? (
@@ -47,12 +47,12 @@ export default async function LibraryPage() {
           <span className="emptyIcon">▦</span>
           <h2>A biblioteca ainda está vazia</h2>
           <p>Gere o primeiro conteúdo com IA e ele será salvo aqui automaticamente.</p>
-          <Link className="cta" href="/create">Criar primeiro conteúdo</Link>
+          <Link prefetch={false} className="cta" href="/create">Criar primeiro conteúdo</Link>
         </article>
       ) : (
         <div className="libraryGrid">
           {contents.map((content, i) => (
-            <Link className="contentCard" href={`/content/${content.id}`} key={content.id}>
+            <Link prefetch={false} className="contentCard" href={`/content/${content.id}`} key={content.id}>
               <div className={"contentCover cover" + (i % 6)}>
                 <span>{typeLabels[content.type] || content.type}</span>
                 <b>{content.type === "carousel" ? "7×" : content.type === "reel" ? "▶" : "1×"}</b>

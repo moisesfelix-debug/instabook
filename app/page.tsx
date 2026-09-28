@@ -51,7 +51,7 @@ export default async function Home() {
           <h1>Olá, {firstName} 👋</h1>
           <p>Acompanhe a produção de conteúdo de {workspace.name}.</p>
         </div>
-        <Link className="cta" href="/create">＋ Criar conteúdo</Link>
+        <Link prefetch={false} className="cta" href="/create">＋ Criar conteúdo</Link>
       </header>
 
       <div className="metrics">
@@ -68,18 +68,18 @@ export default async function Home() {
         <article className="panel large">
           <div className="panelHead">
             <div><h2>Próximos conteúdos</h2><p>Agenda do workspace</p></div>
-            <Link href="/calendar">Ver calendário →</Link>
+            <Link prefetch={false} href="/calendar">Ver calendário →</Link>
           </div>
           {upcoming.length === 0 ? (
             <div className="dashboardEmpty">
               <span>◎</span>
               <b>Nenhum conteúdo agendado ainda</b>
               <p>Os rascunhos já podem ser produzidos; o agendamento entra na próxima etapa.</p>
-              <Link href="/create">Criar conteúdo</Link>
+              <Link prefetch={false} href="/create">Criar conteúdo</Link>
             </div>
           ) : (
             upcoming.map((item) => (
-              <Link className="postRow" href={`/content/${item.id}`} key={item.id}>
+              <Link prefetch={false} className="postRow" href={`/content/${item.id}`} key={item.id}>
                 <div className="thumb">{item.type.slice(0, 1).toUpperCase()}</div>
                 <div>
                   <em>{item.type.toUpperCase()}</em>
@@ -99,7 +99,7 @@ export default async function Home() {
           <div className="aiReadyCard"><span>✦</span><div><b>Motor de conteúdo conectado</b><small>Carrossel, post e roteiro de Reel</small></div></div>
           <div className="promptFooter">
             <small>Marca principal: <b>{primaryBrand}</b></small>
-            <Link href="/create">Criar agora ✦</Link>
+            <Link prefetch={false} href="/create">Criar agora ✦</Link>
           </div>
         </article>
       </div>
@@ -108,13 +108,13 @@ export default async function Home() {
         <article className="panel">
           <div className="panelHead">
             <div><h2>Marcas ativas</h2><p>Marcas cadastradas neste workspace</p></div>
-            <Link href="/brands">Gerenciar →</Link>
+            <Link prefetch={false} href="/brands">Gerenciar →</Link>
           </div>
 
           {brands.length === 0 ? (
             <div className="dashboardEmpty compact">
               <b>Nenhuma marca cadastrada.</b>
-              <Link href="/brands/new">Adicionar marca</Link>
+              <Link prefetch={false} href="/brands/new">Adicionar marca</Link>
             </div>
           ) : (
             brands.map((brand, i) => (
@@ -136,8 +136,8 @@ export default async function Home() {
           <div className="panelHead">
             <div><h2>Fluxo de produção</h2><p>O que já está disponível</p></div>
           </div>
-          <div className="setupItem"><span>✓</span><div><b>Memória da marca</b><small>Estratégia, voz, vocabulário e direção visual.</small></div><Link href="/brands">Editar</Link></div>
-          <div className="setupItem"><span>✓</span><div><b>Geração com IA</b><small>O rascunho é salvo na Biblioteca e pode ser editado.</small></div><Link href="/create">Gerar</Link></div>
+          <div className="setupItem"><span>✓</span><div><b>Memória da marca</b><small>Estratégia, voz, vocabulário e direção visual.</small></div><Link prefetch={false} href="/brands">Editar</Link></div>
+          <div className="setupItem"><span>✓</span><div><b>Geração com IA</b><small>O rascunho é salvo na Biblioteca e pode ser editado.</small></div><Link prefetch={false} href="/create">Gerar</Link></div>
         </article>
       </div>
     </AppShell>

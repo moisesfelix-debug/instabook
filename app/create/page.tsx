@@ -23,7 +23,7 @@ export default async function CreatePage({
           <h1>Criar conteúdo</h1>
           <p>Briefing + identidade da marca + IA, salvo automaticamente como rascunho.</p>
         </div>
-        <Link className="secondaryBtn" href="/library">Ver biblioteca</Link>
+        <Link prefetch={false} className="secondaryBtn" href="/library">Ver biblioteca</Link>
       </header>
 
       {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
@@ -33,7 +33,7 @@ export default async function CreatePage({
           <span className="emptyIcon">✦</span>
           <h2>Cadastre uma marca antes de criar</h2>
           <p>A IA usa a identidade da marca como contexto para gerar os conteúdos.</p>
-          <Link className="cta" href="/brands/new">Cadastrar marca</Link>
+          <Link prefetch={false} className="cta" href="/brands/new">Cadastrar marca</Link>
         </article>
       ) : (
         <div className="creatorLayout">

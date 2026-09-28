@@ -49,7 +49,7 @@ export default async function BrandsPage() {
           <h1>Marcas & clientes</h1>
           <p>Gerencie as marcas e clientes reais deste workspace.</p>
         </div>
-        <Link className="cta" href="/brands/new">＋ Nova marca</Link>
+        <Link prefetch={false} className="cta" href="/brands/new">＋ Nova marca</Link>
       </header>
 
       {brands.length === 0 ? (
@@ -57,7 +57,7 @@ export default async function BrandsPage() {
           <span className="emptyIcon">✦</span>
           <h2>Sua primeira marca começa aqui</h2>
           <p>Cadastre identidade, público e tom de voz para começar a criar conteúdos.</p>
-          <Link className="cta" href="/brands/new">Cadastrar primeira marca</Link>
+          <Link prefetch={false} className="cta" href="/brands/new">Cadastrar primeira marca</Link>
         </article>
       ) : (
         <div className="brandCards">
@@ -83,7 +83,7 @@ export default async function BrandsPage() {
               </div>
 
               <div className="brandActions">
-                <Link className="secondaryBtn" href={`/brands/${brand.id}/edit`}>Editar marca</Link>
+                <Link prefetch={false} className="secondaryBtn" href={`/brands/${brand.id}/edit`}>Editar marca</Link>
                 <form action={deleteBrand}>
                   <input type="hidden" name="brandId" value={brand.id} />
                   <button className="dangerBtn" type="submit">Excluir</button>

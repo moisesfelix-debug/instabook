@@ -5,44 +5,53 @@ import { createClient } from "@/lib/supabase/server";
 export const getWorkspaceContext = cache(async () => {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { claims },
+  } = await supabase.auth.getClaims();
 
-  if (!user) {
+  const userId = typeof claims?.sub === "string" ? claims.sub : null;
+
+  if (!userId) {
     redirect("/auth/login");
   }
 
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id,role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
+  const [{ data: membership }, { data: profile }] = await Promise.all([
+    supabase
+      .from("workspace_members")
+      .select("role,workspace:workspaces(id,name,type)")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
 
   if (!membership) {
     redirect("/onboarding");
   }
 
-  const [{ data: workspace }, { data: profile }] = await Promise.all([
-    supabase
-      .from("workspaces")
-      .select("id,name,type")
-      .eq("id", membership.workspace_id)
-      .single(),
-    supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .maybeSingle(),
-  ]);
+  const workspace = Array.isArray(membership.workspace)
+    ? membership.workspace[0]
+    : membership.workspace;
 
   if (!workspace) {
     redirect("/onboarding");
   }
 
+  const userMetadata =
+    claims?.user_metadata && typeof claims.user_metadata === "object"
+      ? claims.user_metadata
+      : {};
+
   return {
     supabase,
-    user,
+    user: {
+      id: userId,
+      email: typeof claims?.email === "string" ? claims.email : null,
+      user_metadata: userMetadata,
+    },
     workspace,
     role: membership.role as string,
     profile,
