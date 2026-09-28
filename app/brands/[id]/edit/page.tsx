@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { updateBrand } from "@/app/brands/actions";
+import { SubmitButton } from "@/components/submit-button";
 
 function listToText(value: string[] | null | undefined) {
   return (value || []).join(", ");
@@ -99,7 +100,7 @@ export default async function EditBrandPage({
             <label>Direção visual<textarea name="visualDirection" defaultValue={guidelines?.visual_direction || ""} placeholder="Ex.: minimalista, alto contraste, fotos gastronômicas quentes, títulos grandes..." /></label>
           </div>
 
-          <button className="cta" type="submit">Salvar memória da marca</button>
+          <SubmitButton pendingLabel="Salvando marca...">Salvar memória da marca</SubmitButton>
         </form>
       </article>
     </AppShell>

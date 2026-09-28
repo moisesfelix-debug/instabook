@@ -7,6 +7,7 @@ import {
   deleteBrand,
   updateAgencyClient,
 } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 type Brand = {
   id: string;
@@ -86,7 +87,7 @@ export default async function BrandsPage() {
                 <Link prefetch={false} className="secondaryBtn" href={`/brands/${brand.id}/edit`}>Editar marca</Link>
                 <form action={deleteBrand}>
                   <input type="hidden" name="brandId" value={brand.id} />
-                  <button className="dangerBtn" type="submit">Excluir</button>
+                  <SubmitButton className="dangerBtn" pendingLabel="Excluindo...">Excluir</SubmitButton>
                 </form>
               </div>
             </article>
@@ -106,7 +107,7 @@ export default async function BrandsPage() {
         <form className="clientCreateForm" action={createAgencyClient}>
           <input name="clientName" required placeholder="Nome do cliente" />
           <input name="clientEmail" type="email" placeholder="E-mail (opcional)" />
-          <button className="cta" type="submit">Adicionar cliente</button>
+          <SubmitButton pendingLabel="Adicionando...">Adicionar cliente</SubmitButton>
         </form>
 
         {clients.length === 0 ? (
@@ -119,11 +120,11 @@ export default async function BrandsPage() {
                   <input type="hidden" name="clientId" value={client.id} />
                   <input name="clientName" defaultValue={client.name} aria-label="Nome do cliente" />
                   <input name="clientEmail" type="email" defaultValue={client.email || ""} placeholder="E-mail" aria-label="E-mail do cliente" />
-                  <button className="secondaryBtn" type="submit">Salvar</button>
+                  <SubmitButton className="secondaryBtn" pendingLabel="Salvando...">Salvar</SubmitButton>
                 </form>
                 <form action={deleteAgencyClient}>
                   <input type="hidden" name="clientId" value={client.id} />
-                  <button className="dangerBtn" type="submit">Excluir</button>
+                  <SubmitButton className="dangerBtn" pendingLabel="Excluindo...">Excluir</SubmitButton>
                 </form>
               </div>
             ))}

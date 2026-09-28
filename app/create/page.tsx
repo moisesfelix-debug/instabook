@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { generateContent } from "./actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function CreatePage({
   searchParams,
@@ -71,7 +72,7 @@ export default async function CreatePage({
                 <label><input type="radio" name="objective" value="vender" /><span>Vender</span></label>
               </fieldset>
 
-              <button className="cta full" type="submit">Gerar e salvar rascunho ✦</button>
+              <SubmitButton className="cta full" pendingLabel="Gerando conteúdo...">Gerar e salvar rascunho ✦</SubmitButton>
             </form>
             <p className="featureNote">Durante a fase de protótipo, a geração usa Ling 3.0 Flash Free via Vercel AI Gateway. O modelo de produção poderá ser trocado sem alterar o fluxo do produto.</p>
           </article>

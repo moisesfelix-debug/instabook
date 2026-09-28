@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { deleteContent, updateContent } from "@/app/content/actions";
+import { SubmitButton } from "@/components/submit-button";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -115,13 +116,13 @@ export default async function ContentPage({
             <small>Briefing original</small>
             <p>{content.briefing || "Sem briefing salvo."}</p>
           </div>
-          <button className="cta full" type="submit">Salvar alterações</button>
+          <SubmitButton className="cta full" pendingLabel="Salvando alterações...">Salvar alterações</SubmitButton>
         </aside>
       </form>
 
       <form className="deleteContentForm" action={deleteContent}>
         <input type="hidden" name="contentId" value={content.id} />
-        <button className="dangerBtn" type="submit">Excluir conteúdo</button>
+        <SubmitButton className="dangerBtn" pendingLabel="Excluindo...">Excluir conteúdo</SubmitButton>
       </form>
     </AppShell>
   );

@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { createBrand } from "../actions";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function NewBrandPage({
   searchParams,
@@ -68,7 +69,7 @@ export default async function NewBrandPage({
             <label>Direção visual<textarea name="visualDirection" placeholder="Minimalista, alto contraste, títulos grandes..." /></label>
           </div>
 
-          <button className="cta" type="submit">Salvar marca</button>
+          <SubmitButton pendingLabel="Salvando marca...">Salvar marca</SubmitButton>
         </form>
       </article>
     </AppShell>
