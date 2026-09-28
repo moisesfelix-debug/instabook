@@ -19,6 +19,7 @@ type VisualSlide = {
   highlight?: string | null;
   secondary_headline?: string | null;
   secondary_body?: string | null;
+  image_url?: string | null;
 };
 
 const directions: Array<{ id: ArtDirection; label: string; description: string }> = [
@@ -248,7 +249,8 @@ export function VisualCarousel({
     canvas.width = 1080;
     canvas.height = 1350;
 
-    const [hero, logo] = await Promise.all([loadBitmap(heroImageUrl), loadBitmap(logoUrl)]);
+    const activeImageUrl = current.image_url || heroImageUrl;
+    const [hero, logo] = await Promise.all([loadBitmap(activeImageUrl), loadBitmap(logoUrl)]);
     const headline = current.headline || "";
     const body = current.body || "";
     const slideRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
@@ -434,7 +436,8 @@ export function VisualCarousel({
     }
   }
 
-  const heroStyle = heroImageUrl ? ({ backgroundImage: `url("${heroImageUrl}")` } as CSSProperties) : undefined;
+  const activeImageUrl = current.image_url || heroImageUrl;
+  const heroStyle = activeImageUrl ? ({ backgroundImage: `url("${activeImageUrl}")` } as CSSProperties) : undefined;
   const logoStyle = logoUrl ? ({ backgroundImage: `url("${logoUrl}")` } as CSSProperties) : undefined;
   const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
 
@@ -471,8 +474,9 @@ export function VisualCarousel({
       <div className="visualWorkspace">
         <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
-        <div className={`visualCanvas proCanvas ${direction} role-${displayRole} priority-${current.visual_priority || "balanced"} ${heroImageUrl ? "hasHero" : ""}`}>
-          {heroImageUrl && current.visual_priority !== "text" && <div className="visualHeroLayer" style={heroStyle} />}
+        <div className={`visualCanvas proCanvas ${direction} role-${displayRole} priority-${current.visual_priority || "balanced"} ${activeImageUrl ? "hasHero" : ""}`}>
+          {activeImageUrl && current.visual_priority !== "text" && <div className="visualHeroLayer" style={heroStyle} />}
+          {current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
 
           <div className="visualTop">
             <span className="visualBrandName">

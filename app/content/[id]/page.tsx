@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { deleteContent, updateContent, uploadContentHero } from "@/app/content/actions";
+import { deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
 
@@ -21,7 +21,7 @@ export default async function ContentPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; asset?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; asset?: string; generated?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace } = await getWorkspaceContext();
@@ -35,7 +35,7 @@ export default async function ContentPage({
       .maybeSingle(),
     supabase
       .from("content_slides")
-      .select("id,position,headline,body,slide_role,emphasis,visual_priority,badge,highlight,secondary_headline,secondary_body")
+      .select("id,position,headline,body,slide_role,emphasis,visual_priority,badge,highlight,secondary_headline,secondary_body,image_path,image_prompt")
       .eq("content_id", id)
       .eq("workspace_id", workspace.id)
       .order("position"),
@@ -70,6 +70,16 @@ export default async function ContentPage({
     heroImageUrl = signedImage?.signedUrl || null;
   }
 
+  const visualSlides = await Promise.all(
+    (slides || []).map(async (slide) => {
+      if (!slide.image_path) return { ...slide, image_url: null };
+      const { data } = await supabase.storage
+        .from("content-assets")
+        .createSignedUrl(slide.image_path, 60 * 60 * 6);
+      return { ...slide, image_url: data?.signedUrl || null };
+    })
+  );
+
   return (
     <AppShell>
       <header>
@@ -83,6 +93,7 @@ export default async function ContentPage({
 
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
+      {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais gerados com IA e conectados ao carrossel.</div>}
       {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
 
       {(slides || []).length > 0 && (
@@ -107,6 +118,20 @@ export default async function ContentPage({
       )}
 
       {(slides || []).length > 0 && (
+        <article className="panel aiVisualPanel">
+          <div>
+            <span className="eyebrow">VISUAIS POR SLIDE</span>
+            <h2>Gerar imagens com IA</h2>
+            <p>O Diretor de Arte escolhe até 3 slides estratégicos e cria visuais diferentes para cada um, preservando o texto no nosso motor gráfico.</p>
+          </div>
+          <form action={generateCarouselVisuals}>
+            <input type="hidden" name="contentId" value={content.id} />
+            <SubmitButton className="cta" pendingLabel="Criando visuais...">Gerar visuais com IA ✦</SubmitButton>
+          </form>
+        </article>
+      )}
+
+      {(slides || []).length > 0 && (
         <VisualCarousel
           brandName={brand?.name || "Marca"}
           primaryColor={visualGuidelines?.primary_color}
@@ -115,7 +140,7 @@ export default async function ContentPage({
           heroImageUrl={heroImageUrl}
           contentArchetype={content.content_archetype}
           artDirection={content.art_direction}
-          slides={slides || []}
+          slides={visualSlides}
         />
       )}
 
