@@ -86,7 +86,7 @@ export default async function Home() {
             brands.map((brand, i) => (
               <div className="brandRow" key={brand.id}>
                 <span className={"brandIcon b" + (i % 3)}>
-                  {brand.name.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()}
+                  {brand.name.split(" ").map((x: string) => x[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
                 <div>
                   <b>{brand.name}</b>
