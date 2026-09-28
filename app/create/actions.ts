@@ -26,7 +26,7 @@ const generatedContentSchema = z.object({
   slides: z.array(
     z.object({
       headline: z.string().max(140),
-      body: z.string().max(600),
+      body: z.string().max(600).nullable().optional(),
       role: slideRoleSchema.optional(),
       emphasis: emphasisSchema.optional(),
       visualPriority: visualPrioritySchema.optional(),
@@ -359,7 +359,7 @@ Use exatamente estas chaves:
         workspace_id: workspace.id,
         position: index + 1,
         headline: slide.headline,
-        body: slide.body,
+        body: slide.body || null,
         slide_role: slide.role,
         emphasis: slide.emphasis,
         visual_priority: slide.visualPriority,
