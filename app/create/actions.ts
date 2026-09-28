@@ -144,7 +144,12 @@ function normalizeGenerated(generated: Generated, briefing: string) {
     artDirection,
     slides: generated.slides.map((slide, index) => {
       const position = index + 1;
-      const role = slide.role || fallbackRole(archetype, position, total);
+      const role: SlideRole =
+        position === 1
+          ? "hook"
+          : position === total && total > 1
+            ? "cta"
+            : slide.role || fallbackRole(archetype, position, total);
 
       return {
         ...slide,
