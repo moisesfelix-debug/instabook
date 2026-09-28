@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 
 type Archetype = "general" | "checklist" | "story" | "comparison" | "product" | "authority";
 type ArtDirection = "editorial" | "split" | "minimal";
+type VisualStyle = "bold_performance" | "clean_consulting" | "human_editorial" | "zine_collage" | "sensory_product";
 type SlideRole = "hook" | "second_hook" | "context" | "item" | "comparison" | "proof" | "transition" | "result" | "takeaway" | "cta" | "body";
 
 type VisualSlide = {
@@ -27,6 +28,49 @@ const directions: Array<{ id: ArtDirection; label: string; description: string }
   { id: "split", label: "Split", description: "Contraste, blocos, comparações e fotografia em destaque" },
   { id: "minimal", label: "Minimal", description: "Dados, autoridade, sofisticação e bastante respiro" },
 ];
+
+const stylePacks: Array<{ id: VisualStyle; label: string; description: string }> = [
+  { id: "bold_performance", label: "Bold Performance", description: "Impacto, contraste, números e tipografia dominante" },
+  { id: "clean_consulting", label: "Clean Consulting", description: "Grid rigoroso, respiro e aparência B2B premium" },
+  { id: "human_editorial", label: "Human Editorial", description: "Fotografia + linguagem editorial mais humana" },
+  { id: "zine_collage", label: "Zine / Collage", description: "Camadas, recortes e textura com personalidade" },
+  { id: "sensory_product", label: "Sensory Product", description: "Imagem protagonista para produto, comida e experiência" },
+];
+
+function recommendedStyle(archetype: Archetype): VisualStyle {
+  if (archetype === "authority") return "clean_consulting";
+  if (archetype === "product") return "sensory_product";
+  if (archetype === "story") return "human_editorial";
+  if (archetype === "checklist" || archetype === "comparison") return "bold_performance";
+  return "human_editorial";
+}
+
+function normalizeCopy(value?: string | null) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function visibleHighlight(slide: VisualSlide, role: SlideRole) {
+  const highlight = normalizeCopy(slide.highlight);
+  const headline = normalizeCopy(slide.headline);
+  if (!highlight) return null;
+
+  // Avoid the common AI pattern "5 erros" + "5 erros que..." appearing twice.
+  if (
+    headline === highlight ||
+    headline.startsWith(highlight + " ") ||
+    ((role === "hook" || role === "second_hook") && headline.includes(highlight))
+  ) {
+    return null;
+  }
+
+  return slide.highlight;
+}
 
 const archetypeLabels: Record<Archetype, string> = {
   general: "Conteúdo editorial",
@@ -221,6 +265,7 @@ export function VisualCarousel({
     : "editorial";
 
   const [direction, setDirection] = useState<ArtDirection>(initialDirection);
+  const [style, setStyle] = useState<VisualStyle>(recommendedStyle(archetype));
   const [index, setIndex] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
@@ -249,7 +294,8 @@ export function VisualCarousel({
     canvas.width = 1080;
     canvas.height = 1350;
 
-    const activeImageUrl = current.image_url || heroImageUrl;
+    const activeImageUrl =
+      current.visual_priority === "text" ? null : current.image_url || heroImageUrl;
     const [hero, logo] = await Promise.all([loadBitmap(activeImageUrl), loadBitmap(logoUrl)]);
     const headline = current.headline || "";
     const body = current.body || "";
@@ -258,6 +304,7 @@ export function VisualCarousel({
     const total = String(slides.length).padStart(2, "0");
     const brandInitials = initials(brandName);
     const badge = current.badge || roleLabels[slideRole];
+    const highlight = visibleHighlight(current, slideRole);
 
     ctx.textBaseline = "top";
 
@@ -376,14 +423,14 @@ export function VisualCarousel({
       ctx.font = "400 28px Arial";
       fillWrapped(ctx, rightBody, 600, top + 135 + r * 62, 365, 39, 7);
     } else if (slideRole === "proof" || slideRole === "result") {
-      if (current.highlight) {
+      if (highlight) {
         ctx.fillStyle = direction === "minimal" ? primary : "#ffffff";
         ctx.font = "900 112px Arial";
-        fillWrapped(ctx, current.highlight, 78, 420, 900, 120, 2);
+        fillWrapped(ctx, highlight, 78, 420, 900, 120, 2);
       }
       ctx.fillStyle = mainText;
       ctx.font = "900 64px Arial";
-      const y = current.highlight ? 680 : 470;
+      const y = highlight ? 680 : 470;
       const lines = fillWrapped(ctx, headline, 78, y, 900, 75, 4);
       ctx.fillStyle = softText;
       ctx.font = "400 31px Arial";
@@ -403,14 +450,14 @@ export function VisualCarousel({
       ctx.font = "900 30px Arial";
       ctx.fillText("CONTINUE / SALVE / COMPARTILHE →", 112, 1080);
     } else {
-      if (current.highlight) {
+      if (highlight) {
         ctx.fillStyle = direction === "minimal" ? primary : "rgba(255,255,255,.92)";
         ctx.font = "900 76px Arial";
-        fillWrapped(ctx, current.highlight, 78, 405, 850, 88, 2);
+        fillWrapped(ctx, highlight, 78, 405, 850, 88, 2);
       }
       ctx.fillStyle = mainText;
       ctx.font = "900 64px Arial";
-      const start = current.highlight ? 650 : 465;
+      const start = highlight ? 650 : 465;
       const lines = fillWrapped(ctx, headline, 78, start, 900, 75, 4);
       ctx.fillStyle = softText;
       ctx.font = "400 31px Arial";
@@ -436,10 +483,12 @@ export function VisualCarousel({
     }
   }
 
-  const activeImageUrl = current.image_url || heroImageUrl;
+  const activeImageUrl =
+    current.visual_priority === "text" ? null : current.image_url || heroImageUrl;
   const heroStyle = activeImageUrl ? ({ backgroundImage: `url("${activeImageUrl}")` } as CSSProperties) : undefined;
   const logoStyle = logoUrl ? ({ backgroundImage: `url("${logoUrl}")` } as CSSProperties) : undefined;
   const displayRole = current.slide_role || fallbackRole(archetype, current.position, slides.length);
+  const displayHighlight = visibleHighlight(current, displayRole);
 
   return (
     <article className="panel visualStudio professionalStudio" style={cssVars}>
@@ -457,26 +506,52 @@ export function VisualCarousel({
         </button>
       </div>
 
-      <div className="templatePicker directionPicker" aria-label="Escolher direção de arte">
-        {directions.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className={direction === item.id ? "templateOption active" : "templateOption"}
-            onClick={() => setDirection(item.id)}
-          >
-            <b>{item.label}</b>
-            <small>{item.description}</small>
-          </button>
-        ))}
+      <div className="visualControlGroup">
+        <div className="visualControlLabel">
+          <span className="eyebrow">DIREÇÃO ESTRUTURAL</span>
+          <small>Define a arquitetura base do slide.</small>
+        </div>
+        <div className="templatePicker directionPicker" aria-label="Escolher direção de arte">
+          {directions.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={direction === item.id ? "templateOption active" : "templateOption"}
+              onClick={() => setDirection(item.id)}
+            >
+              <b>{item.label}</b>
+              <small>{item.description}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="visualControlGroup styleControlGroup">
+        <div className="visualControlLabel">
+          <span className="eyebrow">ESTILO VISUAL</span>
+          <small>Define a linguagem estética aplicada sobre a estrutura.</small>
+        </div>
+        <div className="stylePackPicker" aria-label="Escolher estilo visual">
+          {stylePacks.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={style === item.id ? "stylePackOption active" : "stylePackOption"}
+              onClick={() => setStyle(item.id)}
+            >
+              <b>{item.label}</b>
+              <small>{item.description}</small>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="visualWorkspace">
         <button className="visualNav" type="button" onClick={() => setIndex((v) => (v - 1 + slides.length) % slides.length)} aria-label="Slide anterior">←</button>
 
-        <div className={`visualCanvas proCanvas ${direction} role-${displayRole} priority-${current.visual_priority || "balanced"} ${activeImageUrl ? "hasHero" : ""}`}>
-          {activeImageUrl && (Boolean(current.image_url) || current.visual_priority !== "text") && <div className="visualHeroLayer" style={heroStyle} />}
-          {current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
+        <div className={`visualCanvas proCanvas ${direction} style-${style} role-${displayRole} priority-${current.visual_priority || "balanced"} ${activeImageUrl ? "hasHero" : ""}`}>
+          {activeImageUrl && <div className="visualHeroLayer" style={heroStyle} />}
+          {activeImageUrl && current.image_url && <span className="aiVisualChip">VISUAL IA</span>}
 
           <div className="visualTop">
             <span className="visualBrandName">
@@ -501,7 +576,7 @@ export function VisualCarousel({
             </div>
           ) : (
             <div className="visualCopy roleAwareCopy">
-              {current.highlight && <strong className="visualHighlight">{current.highlight}</strong>}
+              {displayHighlight && <strong className="visualHighlight">{displayHighlight}</strong>}
               {displayRole === "item" && <span className="itemNumber">{String(current.position - 2).padStart(2, "0")}</span>}
               <h3>{current.headline}</h3>
               {current.body && <p>{current.body}</p>}
