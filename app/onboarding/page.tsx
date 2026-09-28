@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { createWorkspace } from "./actions";
 
 export default async function OnboardingPage({
@@ -6,6 +8,21 @@ export default async function OnboardingPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/auth/login");
+
+  const { data: existingMembership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMembership) redirect("/");
 
   return (
     <main className="onboardingPage">
@@ -18,7 +35,7 @@ export default async function OnboardingPage({
         {params.error && <div className="formAlert errorAlert">{params.error}</div>}
 
         <form action={createWorkspace}>
-          <label>Nome do workspace<input name="workspaceName" required placeholder="Ex.: SaborBoost" /></label>
+          <label>Nome do workspace<input name="workspaceName" type="text" required placeholder="Ex.: SaborBoost" /></label>
           <div className="workspaceTypes">
             <label><input type="radio" name="workspaceType" value="creator" defaultChecked /><span><b>Empresa / Creator</b><small>Uma ou poucas marcas próprias.</small></span></label>
             <label><input type="radio" name="workspaceType" value="professional" /><span><b>Profissional / Freelancer</b><small>Gerencie várias marcas sozinho.</small></span></label>

@@ -10,18 +10,22 @@
 ## Fase 1 — fundação funcional
 - [x] Projeto Next.js
 - [x] Navegação base do produto
-- [x] Telas de criação, calendário, biblioteca, marcas, analytics e aprovações
-- [x] Projeto Supabase criado em São Paulo
-- [x] Schema multi-tenant inicial
-- [x] RLS em todas as tabelas expostas
-- [x] Profiles + workspaces + memberships + clientes + marcas
-- [x] Bootstrap seguro de workspace
-- [x] Código de autenticação Supabase SSR
-- [ ] Validar fluxo E2E: cadastro → confirmação → onboarding → primeira marca
-- [ ] Transformar listagem de marcas em dados reais
-- [ ] Identidade visual da marca persistida no banco
+- [x] Projeto Supabase em São Paulo
+- [x] Schema multi-tenant + RLS
+- [x] Profiles + workspaces + memberships
+- [x] Autenticação Supabase SSR
+- [x] Cadastro/login/onboarding testados com usuário real
+- [x] Workspace e marca persistidos no banco
+- [x] Sidebar carregando usuário/workspace real
+- [x] Dashboard sem métricas/marcas fictícias
+- [x] CRUD real de marcas
+- [x] CRUD real de clientes
+- [x] Vínculo marca ↔ cliente protegido por tenant
+- [ ] Ajustar entregabilidade/branding do e-mail transacional
+- [ ] Identidade visual completa da marca persistida no banco
 
 ## Fase 2 — criação
+- [ ] Schema de conteúdos e versões
 - [ ] Geração estruturada com IA
 - [ ] Posts
 - [ ] Carrosséis

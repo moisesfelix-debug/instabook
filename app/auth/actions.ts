@@ -17,15 +17,16 @@ export async function signIn(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
+  if (error || !authData.user) {
     redirect(destination("/auth/login", "error", "Não foi possível entrar. Confira seus dados."));
   }
 
   const { data: membership } = await supabase
     .from("workspace_members")
     .select("workspace_id")
+    .eq("user_id", authData.user.id)
     .limit(1)
     .maybeSingle();
 
@@ -60,4 +61,10 @@ export async function signUp(formData: FormData) {
   }
 
   redirect(destination("/auth/login", "message", "Conta criada. Confira seu e-mail para confirmar o acesso."));
+}
+
+export async function signOut() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/auth/login");
 }
