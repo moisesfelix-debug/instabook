@@ -185,6 +185,7 @@ export function buildFullPostImagePrompt({
     "Do not imitate or reproduce any third-party brand, agency, creator or proprietary template. The design must be original.",
     "TEXT FIDELITY IS CRITICAL. Render the Portuguese text below exactly as written, with correct spelling and accents. Do not paraphrase, translate, add words, invent numbers, or repeat phrases.",
     `BRAND LABEL: "${brandName}"`,
+    "If an official brand logo image is supplied as a reference, reproduce that logo faithfully. Do not redesign, restyle, misspell or invent a replacement logo. If no logo reference is supplied, render the brand name as clean text only.",
     badge ? `BADGE: "${badge}"` : "BADGE: omit if it hurts the composition.",
     `MAIN HEADLINE: "${headline || ""}"`,
     highlight ? `SUPPORTING HIGHLIGHT: "${highlight}"` : "",
@@ -363,3 +364,164 @@ export async function generateAndStoreVisuals({
     results,
   };
 }
+
+export type FinalArtSlideInput = VisualSlideInput & {
+  badge?: string | null;
+  highlight?: string | null;
+};
+
+export async function generateFinalSunburstCarousel({
+  supabase,
+  workspaceId,
+  content,
+  brand,
+  guidelines,
+  slides,
+  logoBytes,
+}: {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  content: VisualContent;
+  brand: VisualBrand;
+  guidelines: VisualGuidelines | null;
+  slides: FinalArtSlideInput[];
+  logoBytes?: Buffer | null;
+}) {
+  if (slides.length === 0) {
+    return { generatedCount: 0, failedCount: 0, results: [] as PromiseSettledResult<string>[] };
+  }
+
+  const ordered = [...slides].sort((a, b) => a.position - b.position);
+  const cover = ordered[0];
+
+  const coverPrompt = buildFullPostImagePrompt({
+    brandName: brand.name,
+    segment: brand.segment,
+    archetype: content.content_archetype || "general",
+    artDirection: content.art_direction || "editorial",
+    primaryColor: guidelines?.primary_color || null,
+    secondaryColor: guidelines?.secondary_color || null,
+    headline: cover.headline,
+    body: cover.body,
+    badge: cover.badge || null,
+    highlight: cover.highlight || null,
+    visualFamily: content.visual_family || "atlas",
+  });
+
+  const coverGenerated = await generateImage({
+    model: "openai/gpt-image-2.5-sunburst",
+    prompt: logoBytes
+      ? {
+          text: coverPrompt,
+          images: [logoBytes],
+        }
+      : coverPrompt,
+    aspectRatio: "4:5",
+  });
+
+  const coverImage = coverGenerated.images[0];
+  if (!coverImage?.base64) throw new Error("Sunburst returned no cover image");
+
+  const coverMediaType = coverImage.mediaType || "image/png";
+  const coverExtension =
+    coverMediaType === "image/jpeg" ? "jpg" : coverMediaType === "image/webp" ? "webp" : "png";
+  const coverPath = `${workspaceId}/${content.id}/final-ai/slide-1-${Date.now()}.${coverExtension}`;
+  const coverBytes = Buffer.from(coverImage.base64, "base64");
+
+  const { error: coverUploadError } = await supabase.storage
+    .from("content-assets")
+    .upload(coverPath, coverBytes, { contentType: coverMediaType, upsert: false });
+
+  if (coverUploadError) throw coverUploadError;
+
+  const { error: coverSaveError } = await supabase
+    .from("content_slides")
+    .update({
+      image_path: coverPath,
+      image_prompt: coverPrompt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", cover.id)
+    .eq("content_id", content.id)
+    .eq("workspace_id", workspaceId);
+
+  if (coverSaveError) {
+    await supabase.storage.from("content-assets").remove([coverPath]);
+    throw coverSaveError;
+  }
+
+  const rest = ordered.slice(1);
+  const results = await Promise.allSettled(
+    rest.map(async (slide) => {
+      const prompt = buildReferenceCarouselPrompt({
+        brandName: brand.name,
+        segment: brand.segment,
+        archetype: content.content_archetype || "general",
+        artDirection: content.art_direction || "editorial",
+        visualFamily: content.visual_family || "atlas",
+        primaryColor: guidelines?.primary_color || null,
+        secondaryColor: guidelines?.secondary_color || null,
+        position: slide.position,
+        totalSlides: ordered.length,
+        role: slide.slide_role || "body",
+        badge: slide.badge || null,
+        headline: slide.headline,
+        body: slide.body,
+        highlight: slide.highlight || null,
+      });
+
+      const images = logoBytes ? [coverBytes, logoBytes] : [coverBytes];
+
+      const generated = await generateImage({
+        model: "openai/gpt-image-2.5-sunburst",
+        prompt: {
+          text: prompt,
+          images,
+        },
+        aspectRatio: "4:5",
+      });
+
+      const image = generated.images[0];
+      if (!image?.base64) throw new Error(`Sunburst returned no image for slide ${slide.position}`);
+
+      const mediaType = image.mediaType || "image/png";
+      const extension =
+        mediaType === "image/jpeg" ? "jpg" : mediaType === "image/webp" ? "webp" : "png";
+      const path = `${workspaceId}/${content.id}/final-ai/slide-${slide.position}-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("content-assets")
+        .upload(path, Buffer.from(image.base64, "base64"), {
+          contentType: mediaType,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { error: saveError } = await supabase
+        .from("content_slides")
+        .update({
+          image_path: path,
+          image_prompt: prompt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", slide.id)
+        .eq("content_id", content.id)
+        .eq("workspace_id", workspaceId);
+
+      if (saveError) {
+        await supabase.storage.from("content-assets").remove([path]);
+        throw saveError;
+      }
+
+      return slide.id;
+    })
+  );
+
+  return {
+    generatedCount: 1 + results.filter((result) => result.status === "fulfilled").length,
+    failedCount: results.filter((result) => result.status === "rejected").length,
+    results,
+  };
+}
+

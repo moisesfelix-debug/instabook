@@ -5,6 +5,7 @@ import { getWorkspaceContext } from "@/lib/workspace-context";
 import { compareImageModels, deleteContent, generateCarouselVisuals, generateSunburstCarouselFromReference, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
+import { FinalAiCarousel } from "@/components/final-ai-carousel";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -81,6 +82,15 @@ export default async function ContentPage({
   );
 
   const generatedVisualCount = visualSlides.filter((slide) => Boolean(slide.image_url)).length;
+  const finalAiSlides = visualSlides.filter((slide) =>
+    Boolean(slide.image_url) &&
+    (
+      String(slide.image_prompt || "").startsWith("INSTABOOK_FULL_POST_V1") ||
+      String(slide.image_prompt || "").startsWith("INSTABOOK_REFERENCE_CAROUSEL_V1")
+    )
+  );
+  const hasCompleteFinalAiCarousel =
+    finalAiSlides.length > 0 && finalAiSlides.length === visualSlides.length;
 
   const { data: latestComparison } = await supabase
     .from("content_visual_comparisons")
@@ -187,6 +197,7 @@ export default async function ContentPage({
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
       {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais regenerados com IA.</div>}
+      {query.asset === "final-ai" && <div className="formAlert successAlert pageAlert">Conteúdo criado com {query.generated || "0"} arte(s) finais pelo Sunburst.</div>}
       {query.compare && <div className="formAlert successAlert pageAlert">{query.compared || "0"} modelo(s) concluíram a comparação.</div>}
       {query.carouselAi && (
         <div className={Number(query.carouselFailed || 0) > 0 ? "formAlert errorAlert pageAlert" : "formAlert successAlert pageAlert"}>
@@ -202,7 +213,15 @@ export default async function ContentPage({
       )}
       {query.error && <div className="formAlert errorAlert pageAlert">{query.error}</div>}
 
-      {(slides || []).length > 0 && (
+      {finalAiSlides.length > 0 && (
+        <FinalAiCarousel
+          brandName={brand?.name || "Marca"}
+          slides={finalAiSlides}
+        />
+      )}
+
+
+      {!hasCompleteFinalAiCarousel && (slides || []).length > 0 && (
         <article className="panel assetPanel contentAssetPanel">
           <div
             className="assetPreview contentAssetPreview"
@@ -223,7 +242,7 @@ export default async function ContentPage({
         </article>
       )}
 
-      {(slides || []).length > 0 && (
+      {!hasCompleteFinalAiCarousel && (slides || []).length > 0 && (
         <article className="panel aiVisualPanel">
           <div>
             <span className="eyebrow">VISUAIS POR SLIDE</span>
@@ -322,7 +341,7 @@ export default async function ContentPage({
         </article>
       )}
 
-      {(slides || []).length > 0 && (
+      {finalAiSlides.length === 0 && (slides || []).length > 0 && (
         <VisualCarousel
           brandName={brand?.name || "Marca"}
           primaryColor={visualGuidelines?.primary_color}

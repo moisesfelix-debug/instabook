@@ -5,7 +5,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { generateAndStoreVisuals, type VisualSlideInput } from "@/lib/visual-generation";
+import { generateAndStoreVisuals, generateFinalSunburstCarousel, type FinalArtSlideInput } from "@/lib/visual-generation";
 import { isVisualFamily, visualFamilyById, type VisualFamily } from "@/lib/visual-families";
 import {
   blueprintPrompt,
@@ -305,7 +305,7 @@ export async function generateContent(formData: FormData) {
       .maybeSingle(),
     supabase
       .from("brand_guidelines")
-      .select("primary_color,secondary_color,default_cta,voice_notes,preferred_words,forbidden_words,content_pillars,value_proposition,visual_direction")
+      .select("primary_color,secondary_color,logo_path,default_cta,voice_notes,preferred_words,forbidden_words,content_pillars,value_proposition,visual_direction")
       .eq("brand_id", brandId)
       .eq("workspace_id", workspace.id)
       .maybeSingle(),
@@ -488,7 +488,7 @@ ${responseShape(type)}
     fail("O conteúdo foi gerado, mas não foi possível salvar o rascunho.");
   }
 
-  let savedSlides: VisualSlideInput[] = [];
+  let savedSlides: FinalArtSlideInput[] = [];
 
   if (generated.slides.length > 0) {
     const { data: insertedSlides, error: slidesError } = await supabase
@@ -509,7 +509,7 @@ ${responseShape(type)}
           secondary_body: slide.secondaryBody,
         }))
       )
-      .select("id,position,headline,body,slide_role,visual_priority,image_path");
+      .select("id,position,headline,body,slide_role,visual_priority,badge,highlight,image_path");
 
     if (slidesError) {
       await supabase.from("contents").delete().eq("id", content.id);
@@ -537,48 +537,84 @@ ${responseShape(type)}
   });
 
   let generatedVisuals = 0;
+  let finalArtMode = false;
 
   if ((type === "carousel" || type === "post") && savedSlides.length > 0) {
+    const contentContext = {
+      id: content.id,
+      content_archetype: generated.contentArchetype,
+      art_direction: generated.artDirection,
+      visual_style: generated.visualStyle,
+      visual_family: generated.visualFamily,
+    };
+    const brandContext = {
+      name: brand.name,
+      segment: brand.segment || null,
+    };
+    const visualGuidelines = guidelines
+      ? {
+          primary_color: guidelines.primary_color || null,
+          secondary_color: guidelines.secondary_color || null,
+        }
+      : null;
+
+    let logoBytes: Buffer | null = null;
+    if (guidelines?.logo_path) {
+      try {
+        const { data: logoBlob, error: logoError } = await supabase.storage
+          .from("brand-assets")
+          .download(guidelines.logo_path);
+        if (!logoError && logoBlob) {
+          logoBytes = Buffer.from(await logoBlob.arrayBuffer());
+        }
+      } catch (logoError) {
+        console.warn("instabook.brand_logo_reference_unavailable", logoError);
+      }
+    }
+
     try {
-      const visualResult = await generateAndStoreVisuals({
+      const finalResult = await generateFinalSunburstCarousel({
         supabase,
         workspaceId: workspace.id,
-        content: {
-          id: content.id,
-          content_archetype: generated.contentArchetype,
-          art_direction: generated.artDirection,
-          visual_style: generated.visualStyle,
-          visual_family: generated.visualFamily,
-        },
-        brand: {
-          name: brand.name,
-          segment: brand.segment || null,
-        },
-        guidelines: guidelines
-          ? {
-              primary_color: guidelines.primary_color || null,
-              secondary_color: guidelines.secondary_color || null,
-            }
-          : null,
+        content: contentContext,
+        brand: brandContext,
+        guidelines: visualGuidelines,
         slides: savedSlides,
-        maxVisuals: type === "post" ? 1 : generated.visualFamily === "vitrine" ? 4 : 3,
+        logoBytes,
       });
 
-      generatedVisuals = visualResult.generatedCount;
+      generatedVisuals = finalResult.generatedCount;
+      finalArtMode = generatedVisuals > 0;
 
-      if (visualResult.failedCount > 0) {
-        console.warn("instabook.auto_visual_generation_partial", {
+      if (finalResult.failedCount > 0) {
+        console.warn("instabook.final_sunburst_partial", {
           contentId: content.id,
-          generatedCount: visualResult.generatedCount,
-          failedCount: visualResult.failedCount,
+          generatedCount: finalResult.generatedCount,
+          failedCount: finalResult.failedCount,
         });
       }
     } catch (error) {
-      console.error("instabook.auto_visual_generation_failed", error);
+      console.error("instabook.final_sunburst_generation_failed", error);
+
+      try {
+        const fallbackResult = await generateAndStoreVisuals({
+          supabase,
+          workspaceId: workspace.id,
+          content: contentContext,
+          brand: brandContext,
+          guidelines: visualGuidelines,
+          slides: savedSlides,
+          maxVisuals: type === "post" ? 1 : generated.visualFamily === "vitrine" ? 4 : 3,
+        });
+
+        generatedVisuals = fallbackResult.generatedCount;
+      } catch (fallbackError) {
+        console.error("instabook.fallback_visual_generation_failed", fallbackError);
+      }
     }
   }
 
   revalidatePath("/");
   revalidatePath("/library");
-  redirect(`/content/${content.id}?asset=auto&generated=${generatedVisuals}`);
+  redirect(`/content/${content.id}?asset=${finalArtMode ? "final-ai" : "auto"}&generated=${generatedVisuals}`);
 }

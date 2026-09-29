@@ -181,7 +181,7 @@ export default async function CreatePage({
               <SubmitButton className="cta full" pendingLabel="Criando conteúdo + visuais...">Gerar conteúdo completo ✦</SubmitButton>
             </form>
 
-            <p className="featureNote">A família visual orienta a copy, a composição e as imagens. Depois da geração, tudo continua editável.</p>
+            <p className="featureNote">A IA cria a estratégia e a copy; o Sunburst desenha a capa final e usa essa direção para manter consistência nos demais slides.</p>
           </article>
 
         </div>
