@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
+import { applyComparisonVisual, compareImageModels, deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
 
@@ -21,7 +21,7 @@ export default async function ContentPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; asset?: string; generated?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; asset?: string; generated?: string; compare?: string; compared?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace } = await getWorkspaceContext();
@@ -82,6 +82,46 @@ export default async function ContentPage({
 
   const generatedVisualCount = visualSlides.filter((slide) => Boolean(slide.image_url)).length;
 
+  const { data: latestComparison } = await supabase
+    .from("content_visual_comparisons")
+    .select("batch_id")
+    .eq("content_id", content.id)
+    .eq("workspace_id", workspace.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let comparisonVisuals: Array<{
+    id: string;
+    label: string;
+    model: string;
+    image_url: string | null;
+  }> = [];
+
+  if (latestComparison?.batch_id) {
+    const { data: comparisons } = await supabase
+      .from("content_visual_comparisons")
+      .select("id,label,model,image_path")
+      .eq("content_id", content.id)
+      .eq("workspace_id", workspace.id)
+      .eq("batch_id", latestComparison.batch_id)
+      .order("created_at");
+
+    comparisonVisuals = await Promise.all(
+      (comparisons || []).map(async (item) => {
+        const { data } = await supabase.storage
+          .from("content-assets")
+          .createSignedUrl(item.image_path, 60 * 60 * 6);
+        return {
+          id: item.id,
+          label: item.label,
+          model: item.model,
+          image_url: data?.signedUrl || null,
+        };
+      })
+    );
+  }
+
   return (
     <AppShell>
       <header>
@@ -96,6 +136,8 @@ export default async function ContentPage({
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
       {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais regenerados com IA.</div>}
+      {query.asset === "comparison" && <div className="formAlert successAlert pageAlert">Imagem da comparação aplicada ao slide.</div>}
+      {query.compare && <div className="formAlert successAlert pageAlert">{query.compared || "0"} modelo(s) concluíram a comparação.</div>}
       {query.asset === "auto" && Number(query.generated || 0) > 0 && (
         <div className="formAlert successAlert pageAlert">Conteúdo criado com {query.generated} visuais gerados automaticamente.</div>
       )}
@@ -138,6 +180,48 @@ export default async function ContentPage({
             <input type="hidden" name="contentId" value={content.id} />
             <SubmitButton className="cta" pendingLabel="Criando visuais...">{generatedVisualCount > 0 ? "Regenerar visuais ✦" : "Gerar visuais com IA ✦"}</SubmitButton>
           </form>
+        </article>
+      )}
+
+      {(slides || []).length > 0 && (
+        <article className="panel modelComparePanel">
+          <div className="modelCompareHead">
+            <div>
+              <span className="eyebrow">LAB DE IMAGEM</span>
+              <h2>Comparar modelos no mesmo slide</h2>
+              <p>Gera a capa com o mesmo prompt em Recraft V4.1, Recraft V4.1 Pro e GPT Image 2.5 Flare. As imagens atuais não são sobrescritas.</p>
+            </div>
+            <form action={compareImageModels}>
+              <input type="hidden" name="contentId" value={content.id} />
+              <SubmitButton className="secondaryBtn" pendingLabel="Comparando modelos...">Gerar comparação A/B/C</SubmitButton>
+            </form>
+          </div>
+
+          {comparisonVisuals.length > 0 && (
+            <div className="modelCompareGrid">
+              {comparisonVisuals.map((item) => (
+                <article className="modelCompareCard" key={item.id}>
+                  <div
+                    className="modelCompareImage"
+                    style={item.image_url ? { backgroundImage: `url("${item.image_url}")` } : undefined}
+                  >
+                    {!item.image_url && <span>Sem preview</span>}
+                  </div>
+                  <div className="modelCompareMeta">
+                    <div>
+                      <b>{item.label}</b>
+                      <small>{item.model}</small>
+                    </div>
+                    <form action={applyComparisonVisual}>
+                      <input type="hidden" name="contentId" value={content.id} />
+                      <input type="hidden" name="comparisonId" value={item.id} />
+                      <SubmitButton className="secondaryBtn" pendingLabel="Aplicando...">Usar esta</SubmitButton>
+                    </form>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </article>
       )}
 

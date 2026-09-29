@@ -155,3 +155,7 @@
   .guidedCreatorForm .cta.full{max-width:none}
   .guidedCreatorForm .featureNote{text-align:left;max-width:none}
 }
+
+
+/* Image model comparison lab */
+.modelComparePanel{margin:18px 0;padding:24px}.modelCompareHead{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}.modelCompareHead h2{margin:5px 0 7px}.modelCompareHead p{margin:0;max-width:760px;color:#707484}.modelCompareHead form{flex:0 0 auto}.modelCompareGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px}.modelCompareCard{overflow:hidden;border:1px solid var(--line);border-radius:15px;background:#fff}.modelCompareImage{aspect-ratio:4/5;background:#f3f4f7 center/cover no-repeat;display:grid;place-items:center;color:#9a9dac;font-size:9px}.modelCompareMeta{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px}.modelCompareMeta b,.modelCompareMeta small{display:block}.modelCompareMeta b{font-size:10px}.modelCompareMeta small{margin-top:3px;color:#8a8e9d;font-size:7px}.modelCompareMeta .secondaryBtn{padding:7px 10px;font-size:8px;white-space:nowrap}@media(max-width:900px){.modelCompareGrid{grid-template-columns:1fr}.modelCompareHead{flex-direction:column}.modelCompareHead form,.modelCompareHead .secondaryBtn{width:100%}}

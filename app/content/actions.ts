@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { generateAndStoreVisuals } from "@/lib/visual-generation";
+import { experimental_generateImage as generateImage } from "ai";
+import { generateAndStoreVisuals, buildSlideImagePrompt, visualPlacement } from "@/lib/visual-generation";
 
 export async function updateContent(formData: FormData) {
   const contentId = String(formData.get("contentId") || "");
@@ -201,4 +202,178 @@ export async function generateCarouselVisuals(formData: FormData) {
 
   revalidatePath(`/content/${contentId}`);
   redirect(`/content/${contentId}?asset=ai&generated=${result.generatedCount}`);
+}
+
+
+const IMAGE_COMPARISON_MODELS = [
+  { model: "recraft/recraft-v4.1", label: "Recraft V4.1" },
+  { model: "recraft/recraft-v4.1-pro", label: "Recraft V4.1 Pro" },
+  { model: "openai/gpt-image-2.5-flare", label: "GPT Image 2.5 Flare" },
+] as const;
+
+export async function compareImageModels(formData: FormData) {
+  const contentId = String(formData.get("contentId") || "");
+  if (!contentId) redirect("/library");
+
+  const { supabase, workspace } = await getWorkspaceContext();
+
+  const [{ data: content }, { data: slides }] = await Promise.all([
+    supabase
+      .from("contents")
+      .select("id,brand_id,type,content_archetype,art_direction,visual_style,visual_family")
+      .eq("id", contentId)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("content_slides")
+      .select("id,position,headline,body,slide_role,visual_priority,image_path,image_prompt")
+      .eq("content_id", contentId)
+      .eq("workspace_id", workspace.id)
+      .order("position"),
+  ]);
+
+  if (!content || !["carousel", "post"].includes(content.type) || !slides?.length) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não encontrei um conteúdo visual válido para comparar.")}`);
+  }
+
+  const slide = slides.find((item) => item.position === 1) || slides[0];
+
+  const [{ data: brand }, { data: guidelines }] = await Promise.all([
+    supabase
+      .from("brands")
+      .select("name,segment")
+      .eq("id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("brand_guidelines")
+      .select("primary_color,secondary_color")
+      .eq("brand_id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+  ]);
+
+  if (!brand) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("A marca desse conteúdo não foi encontrada.")}`);
+  }
+
+  const role = slide.slide_role || "body";
+  const placement = visualPlacement(slide, content.visual_family || "atlas");
+  const prompt =
+    slide.image_prompt ||
+    buildSlideImagePrompt({
+      brandName: brand.name,
+      segment: brand.segment,
+      archetype: content.content_archetype || "general",
+      artDirection: content.art_direction || "editorial",
+      primaryColor: guidelines?.primary_color || null,
+      secondaryColor: guidelines?.secondary_color || null,
+      headline: slide.headline,
+      body: slide.body,
+      role,
+      placement,
+      visualStyle: content.visual_style || "clean_consulting",
+      visualFamily: content.visual_family || "atlas",
+    });
+
+  const batchId = crypto.randomUUID();
+
+  const results = await Promise.allSettled(
+    IMAGE_COMPARISON_MODELS.map(async ({ model, label }) => {
+      const generated = await generateImage({
+        model,
+        prompt,
+        aspectRatio: "4:5",
+      });
+
+      const image = generated.images[0];
+      if (!image?.base64) throw new Error(`${model} returned no image`);
+
+      const mediaType = image.mediaType || "image/png";
+      const extension =
+        mediaType === "image/jpeg" ? "jpg" : mediaType === "image/webp" ? "webp" : "png";
+      const modelSlug = model.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      const path = `${workspace.id}/${contentId}/comparisons/${batchId}/${modelSlug}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("content-assets")
+        .upload(path, Buffer.from(image.base64, "base64"), {
+          contentType: mediaType,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase
+        .from("content_visual_comparisons")
+        .insert({
+          workspace_id: workspace.id,
+          content_id: contentId,
+          slide_id: slide.id,
+          batch_id: batchId,
+          model,
+          label,
+          image_path: path,
+          prompt,
+        });
+
+      if (insertError) {
+        await supabase.storage.from("content-assets").remove([path]);
+        throw insertError;
+      }
+
+      return model;
+    })
+  );
+
+  const successCount = results.filter((result) => result.status === "fulfilled").length;
+  if (successCount === 0) {
+    console.error("instabook.image_model_comparison_failed", results);
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Nenhum dos três modelos conseguiu gerar a comparação.")}`);
+  }
+
+  if (successCount < IMAGE_COMPARISON_MODELS.length) {
+    console.warn("instabook.image_model_comparison_partial", results);
+  }
+
+  revalidatePath(`/content/${contentId}`);
+  redirect(`/content/${contentId}?compare=1&compared=${successCount}`);
+}
+
+export async function applyComparisonVisual(formData: FormData) {
+  const comparisonId = String(formData.get("comparisonId") || "");
+  const contentId = String(formData.get("contentId") || "");
+  if (!comparisonId || !contentId) redirect("/library");
+
+  const { supabase, workspace } = await getWorkspaceContext();
+
+  const { data: comparison } = await supabase
+    .from("content_visual_comparisons")
+    .select("id,content_id,slide_id,image_path,prompt")
+    .eq("id", comparisonId)
+    .eq("content_id", contentId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle();
+
+  if (!comparison) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Essa comparação não está mais disponível.")}`);
+  }
+
+  const { error } = await supabase
+    .from("content_slides")
+    .update({
+      image_path: comparison.image_path,
+      image_prompt: comparison.prompt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", comparison.slide_id)
+    .eq("content_id", contentId)
+    .eq("workspace_id", workspace.id);
+
+  if (error) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não foi possível aplicar essa imagem ao slide.")}`);
+  }
+
+  revalidatePath(`/content/${contentId}`);
+  redirect(`/content/${contentId}?asset=comparison`);
 }
