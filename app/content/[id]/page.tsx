@@ -5,6 +5,7 @@ import { getWorkspaceContext } from "@/lib/workspace-context";
 import { applyComparisonVisual, compareImageModels, deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
+import { ModelComparisonSlide } from "@/components/model-comparison-slide";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -189,7 +190,7 @@ export default async function ContentPage({
             <div>
               <span className="eyebrow">LAB DE IMAGEM</span>
               <h2>Comparar modelos no mesmo slide</h2>
-              <p>Gera a capa com o mesmo prompt em Recraft V4.1, Recraft V4.1 Pro e GPT Image 2.5 Flare. As imagens atuais não são sobrescritas.</p>
+              <p>Compara a capa final completa: mesma copy, mesma família e mesmo layout. Só o modelo que gera a imagem muda entre Recraft V4.1, Recraft V4.1 Pro e GPT Image 2.5 Flare.</p>
             </div>
             <form action={compareImageModels}>
               <input type="hidden" name="contentId" value={content.id} />
@@ -201,11 +202,19 @@ export default async function ContentPage({
             <div className="modelCompareGrid">
               {comparisonVisuals.map((item) => (
                 <article className="modelCompareCard" key={item.id}>
-                  <div
-                    className="modelCompareImage"
-                    style={item.image_url ? { backgroundImage: `url("${item.image_url}")` } : undefined}
-                  >
-                    {!item.image_url && <span>Sem preview</span>}
+                  <div className="modelComparePost">
+                    <ModelComparisonSlide
+                      brandName={brand?.name || "Marca"}
+                      primaryColor={visualGuidelines?.primary_color}
+                      secondaryColor={visualGuidelines?.secondary_color}
+                      logoUrl={logoUrl}
+                      artDirection={content.art_direction}
+                      visualStyle={content.visual_style}
+                      visualFamily={content.visual_family}
+                      slide={(slides || [])[0]}
+                      totalSlides={(slides || []).length}
+                      imageUrl={item.image_url}
+                    />
                   </div>
                   <div className="modelCompareMeta">
                     <div>
