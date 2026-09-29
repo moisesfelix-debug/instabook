@@ -1,6 +1,7 @@
 import { experimental_generateImage as generateImage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { visualFamilyById } from "@/lib/visual-families";
+import { artDirectionPromptBlock, getArtDirectionPlan } from "@/lib/art-direction-playbooks";
 
 export const IMAGE_MODEL = "recraft/recraft-v4.1";
 
@@ -105,12 +106,21 @@ export function buildReferenceCarouselPrompt({
   body: string | null;
   highlight: string | null;
 }) {
+  const playbook = getArtDirectionPlan({
+    family: visualFamily,
+    role,
+    position,
+    totalSlides,
+  });
+
   return [
     REFERENCE_CAROUSEL_PROMPT_MARKER,
     "Create the FINAL, READY-TO-PUBLISH next slide of an Instagram carousel.",
     "The supplied reference image is slide 1 / the approved cover and is the visual source of truth.",
     "Preserve the SAME visual identity: art direction, typography personality, font weight relationships, palette, contrast, shape language, photographic treatment, texture, margins and overall brand energy.",
-    "Do NOT simply copy the cover composition. Design a new composition appropriate to this slide's content while making it unmistakably part of the same carousel.",
+    "Preserve the cover as an IDENTITY reference, not as a LAYOUT template. Do NOT reuse its composition unless the assigned playbook composition explicitly asks for it.",
+    "The carousel must have visual rhythm: same campaign, different compositions. Never solve consecutive slides with the same text/image geometry.",
+    artDirectionPromptBlock(playbook),
     "Canvas: vertical 4:5, equivalent to 1080x1350, edge-to-edge finished artwork.",
     `Brand: ${brandName}. Segment: ${segment || "business"}.`,
     `Carousel: slide ${position} of ${totalSlides}. Role: ${role}. Archetype: ${archetype}. Art direction: ${artDirection}. Visual family: ${visualFamily}.`,
@@ -155,6 +165,7 @@ export function buildFullPostImagePrompt({
   badge,
   highlight,
   visualFamily,
+  totalSlides = 7,
 }: {
   brandName: string;
   segment: string | null;
@@ -167,8 +178,15 @@ export function buildFullPostImagePrompt({
   badge: string | null;
   highlight: string | null;
   visualFamily: string;
+  totalSlides?: number;
 }) {
   const family = visualFamilyById(visualFamily);
+  const playbook = getArtDirectionPlan({
+    family: visualFamily,
+    role: "hook",
+    position: 1,
+    totalSlides,
+  });
 
   return [
     FULL_POST_PROMPT_MARKER,
@@ -177,11 +195,13 @@ export function buildFullPostImagePrompt({
     `Brand: ${brandName}. Segment: ${segment || "business"}.`,
     `Content archetype: ${archetype}. Art direction: ${artDirection}. Visual family: ${visualFamily}.`,
     `Family art direction: ${family.prompt}.`,
+    artDirectionPromptBlock(playbook),
     primaryColor ? `Primary brand color: ${primaryColor}.` : "",
     secondaryColor ? `Secondary brand color: ${secondaryColor}.` : "",
     "You are the art director and graphic designer. Decide the complete composition: photography or illustration, crop, typographic scale, font pairing, spacing, graphic shapes, contrast, layering, rhythm and visual hierarchy.",
     "The final result must look like a high-end social media campaign designed by a senior Brazilian creative studio, not a generic Canva template and not a stock-photo poster.",
     "Use bold composition and intentional asymmetry when appropriate. Preserve strong negative space, clear focal hierarchy and mobile readability.",
+    "This cover establishes a reusable campaign identity, not a layout that every later slide should copy. Make the visual language distinctive enough to survive multiple different compositions.",
     "Do not imitate or reproduce any third-party brand, agency, creator or proprietary template. The design must be original.",
     "TEXT FIDELITY IS CRITICAL. Render the Portuguese text below exactly as written, with correct spelling and accents. Do not paraphrase, translate, add words, invent numbers, or repeat phrases.",
     `BRAND LABEL: "${brandName}"`,
@@ -406,6 +426,7 @@ export async function generateFinalSunburstCarousel({
     badge: cover.badge || null,
     highlight: cover.highlight || null,
     visualFamily: content.visual_family || "atlas",
+    totalSlides: ordered.length,
   });
 
   const coverGenerated = await generateImage({
