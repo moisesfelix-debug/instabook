@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { experimental_generateImage as generateImage } from "ai";
-import { generateAndStoreVisuals, buildSlideImagePrompt, visualPlacement } from "@/lib/visual-generation";
+import { buildFullPostImagePrompt, FULL_POST_PROMPT_MARKER, generateAndStoreVisuals } from "@/lib/visual-generation";
 
 export async function updateContent(formData: FormData) {
   const contentId = String(formData.get("contentId") || "");
@@ -226,7 +226,7 @@ export async function compareImageModels(formData: FormData) {
       .maybeSingle(),
     supabase
       .from("content_slides")
-      .select("id,position,headline,body,slide_role,visual_priority,image_path,image_prompt")
+      .select("id,position,headline,body,slide_role,visual_priority,badge,highlight,image_path,image_prompt")
       .eq("content_id", contentId)
       .eq("workspace_id", workspace.id)
       .order("position"),
@@ -257,24 +257,21 @@ export async function compareImageModels(formData: FormData) {
     redirect(`/content/${contentId}?error=${encodeURIComponent("A marca desse conteúdo não foi encontrada.")}`);
   }
 
-  const role = slide.slide_role || "body";
-  const placement = visualPlacement(slide, content.visual_family || "atlas");
-  const prompt =
-    slide.image_prompt ||
-    buildSlideImagePrompt({
-      brandName: brand.name,
-      segment: brand.segment,
-      archetype: content.content_archetype || "general",
-      artDirection: content.art_direction || "editorial",
-      primaryColor: guidelines?.primary_color || null,
-      secondaryColor: guidelines?.secondary_color || null,
-      headline: slide.headline,
-      body: slide.body,
-      role,
-      placement,
-      visualStyle: content.visual_style || "clean_consulting",
-      visualFamily: content.visual_family || "atlas",
-    });
+  const prompt = buildFullPostImagePrompt({
+    brandName: brand.name,
+    segment: brand.segment,
+    archetype: content.content_archetype || "general",
+    artDirection: content.art_direction || "editorial",
+    primaryColor: guidelines?.primary_color || null,
+    secondaryColor: guidelines?.secondary_color || null,
+    headline: slide.headline,
+    body: slide.body,
+    badge: slide.badge || null,
+    highlight: slide.highlight || null,
+    visualFamily: content.visual_family || "atlas",
+  });
+
+  if (!prompt.startsWith(FULL_POST_PROMPT_MARKER)) throw new Error("Invalid full-post prompt");
 
   const batchId = crypto.randomUUID();
 
@@ -293,7 +290,7 @@ export async function compareImageModels(formData: FormData) {
       const extension =
         mediaType === "image/jpeg" ? "jpg" : mediaType === "image/webp" ? "webp" : "png";
       const modelSlug = model.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-      const path = `${workspace.id}/${contentId}/comparisons/${batchId}/${modelSlug}.${extension}`;
+      const path = `${workspace.id}/${contentId}/full-post-comparisons/${batchId}/${modelSlug}.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("content-assets")
@@ -338,42 +335,4 @@ export async function compareImageModels(formData: FormData) {
 
   revalidatePath(`/content/${contentId}`);
   redirect(`/content/${contentId}?compare=1&compared=${successCount}`);
-}
-
-export async function applyComparisonVisual(formData: FormData) {
-  const comparisonId = String(formData.get("comparisonId") || "");
-  const contentId = String(formData.get("contentId") || "");
-  if (!comparisonId || !contentId) redirect("/library");
-
-  const { supabase, workspace } = await getWorkspaceContext();
-
-  const { data: comparison } = await supabase
-    .from("content_visual_comparisons")
-    .select("id,content_id,slide_id,image_path,prompt")
-    .eq("id", comparisonId)
-    .eq("content_id", contentId)
-    .eq("workspace_id", workspace.id)
-    .maybeSingle();
-
-  if (!comparison) {
-    redirect(`/content/${contentId}?error=${encodeURIComponent("Essa comparação não está mais disponível.")}`);
-  }
-
-  const { error } = await supabase
-    .from("content_slides")
-    .update({
-      image_path: comparison.image_path,
-      image_prompt: comparison.prompt,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", comparison.slide_id)
-    .eq("content_id", contentId)
-    .eq("workspace_id", workspace.id);
-
-  if (error) {
-    redirect(`/content/${contentId}?error=${encodeURIComponent("Não foi possível aplicar essa imagem ao slide.")}`);
-  }
-
-  revalidatePath(`/content/${contentId}`);
-  redirect(`/content/${contentId}?asset=comparison`);
 }

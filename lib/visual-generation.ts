@@ -69,6 +69,65 @@ export function selectSlidesForVisuals(slides: VisualSlideInput[], maxVisuals = 
     .slice(0, maxVisuals);
 }
 
+
+export const FULL_POST_PROMPT_MARKER = "INSTABOOK_FULL_POST_V1";
+
+export function buildFullPostImagePrompt({
+  brandName,
+  segment,
+  archetype,
+  artDirection,
+  primaryColor,
+  secondaryColor,
+  headline,
+  body,
+  badge,
+  highlight,
+  visualFamily,
+}: {
+  brandName: string;
+  segment: string | null;
+  archetype: string;
+  artDirection: string;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  headline: string | null;
+  body: string | null;
+  badge: string | null;
+  highlight: string | null;
+  visualFamily: string;
+}) {
+  const family = visualFamilyById(visualFamily);
+
+  return [
+    FULL_POST_PROMPT_MARKER,
+    "Create the FINAL, READY-TO-PUBLISH Instagram carousel COVER as a complete graphic design, not a background asset.",
+    "Canvas: vertical 4:5, equivalent to 1080x1350.",
+    `Brand: ${brandName}. Segment: ${segment || "business"}.`,
+    `Content archetype: ${archetype}. Art direction: ${artDirection}. Visual family: ${visualFamily}.`,
+    `Family art direction: ${family.prompt}.`,
+    primaryColor ? `Primary brand color: ${primaryColor}.` : "",
+    secondaryColor ? `Secondary brand color: ${secondaryColor}.` : "",
+    "You are the art director and graphic designer. Decide the complete composition: photography or illustration, crop, typographic scale, font pairing, spacing, graphic shapes, contrast, layering, rhythm and visual hierarchy.",
+    "The final result must look like a high-end social media campaign designed by a senior Brazilian creative studio, not a generic Canva template and not a stock-photo poster.",
+    "Use bold composition and intentional asymmetry when appropriate. Preserve strong negative space, clear focal hierarchy and mobile readability.",
+    "Do not imitate or reproduce any third-party brand, agency, creator or proprietary template. The design must be original.",
+    "TEXT FIDELITY IS CRITICAL. Render the Portuguese text below exactly as written, with correct spelling and accents. Do not paraphrase, translate, add words, invent numbers, or repeat phrases.",
+    `BRAND LABEL: "${brandName}"`,
+    badge ? `BADGE: "${badge}"` : "BADGE: omit if it hurts the composition.",
+    `MAIN HEADLINE: "${headline || ""}"`,
+    highlight ? `SUPPORTING HIGHLIGHT: "${highlight}"` : "",
+    body ? `SUPPORTING BODY: "${body}"` : "",
+    "The main headline must dominate the hierarchy but should not occupy an oversized opaque rectangle unless the composition genuinely needs it.",
+    "Avoid stacking multiple competing headlines. Supporting text must be clearly secondary.",
+    "Use imagery as part of the composition, not merely as wallpaper behind text.",
+    "No mockup frame, no phone frame, no Instagram UI, no watermark, no lorem ipsum, no gibberish, no additional captions.",
+    "Deliver only the finished post artwork edge-to-edge.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function buildSlideImagePrompt({
   brandName,
   segment,

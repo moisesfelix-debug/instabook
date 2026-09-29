@@ -19,7 +19,7 @@ import {
   type ContentBlueprint,
 } from "@/lib/content-blueprints";
 
-const MODEL = "openai/gpt-5.6-sol";
+const MODEL = "openai/gpt-5.4-mini";
 
 const archetypeSchema = z.enum(["general", "checklist", "story", "comparison", "product", "authority"]);
 const artDirectionSchema = z.enum(["editorial", "split", "minimal"]);

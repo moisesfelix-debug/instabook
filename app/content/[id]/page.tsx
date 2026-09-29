@@ -2,10 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { applyComparisonVisual, compareImageModels, deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
+import { compareImageModels, deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
-import { ModelComparisonSlide } from "@/components/model-comparison-slide";
 
 const statusLabels: Record<string, string> = {
   draft: "Rascunho",
@@ -88,6 +87,7 @@ export default async function ContentPage({
     .select("batch_id")
     .eq("content_id", content.id)
     .eq("workspace_id", workspace.id)
+    .like("prompt", "INSTABOOK_FULL_POST_V1%")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -106,6 +106,7 @@ export default async function ContentPage({
       .eq("content_id", content.id)
       .eq("workspace_id", workspace.id)
       .eq("batch_id", latestComparison.batch_id)
+      .like("prompt", "INSTABOOK_FULL_POST_V1%")
       .order("created_at");
 
     comparisonVisuals = await Promise.all(
@@ -137,7 +138,6 @@ export default async function ContentPage({
       {query.saved && <div className="formAlert successAlert pageAlert">Alterações salvas.</div>}
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
       {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais regenerados com IA.</div>}
-      {query.asset === "comparison" && <div className="formAlert successAlert pageAlert">Imagem da comparação aplicada ao slide.</div>}
       {query.compare && <div className="formAlert successAlert pageAlert">{query.compared || "0"} modelo(s) concluíram a comparação.</div>}
       {query.asset === "auto" && Number(query.generated || 0) > 0 && (
         <div className="formAlert successAlert pageAlert">Conteúdo criado com {query.generated} visuais gerados automaticamente.</div>
@@ -188,44 +188,34 @@ export default async function ContentPage({
         <article className="panel modelComparePanel">
           <div className="modelCompareHead">
             <div>
-              <span className="eyebrow">LAB DE IMAGEM</span>
-              <h2>Comparar modelos no mesmo slide</h2>
-              <p>Compara a capa final completa: mesma copy, mesma família e mesmo layout. Só o modelo que gera a imagem muda entre Recraft V4.1, Recraft V4.1 Pro e GPT Image 2.5 Flare.</p>
+              <span className="eyebrow">LAB — POST COMPLETO POR IA</span>
+              <h2>Qual IA consegue dirigir a arte melhor?</h2>
+              <p>Os três modelos recebem a mesma marca, copy e direção. Cada um desenha sozinho a capa 4:5 completa — tipografia, imagem, composição, hierarquia e elementos gráficos. Nenhum template do InstaBook é aplicado por cima.</p>
             </div>
             <form action={compareImageModels}>
               <input type="hidden" name="contentId" value={content.id} />
-              <SubmitButton className="secondaryBtn" pendingLabel="Comparando modelos...">Gerar comparação A/B/C</SubmitButton>
+              <SubmitButton className="secondaryBtn" pendingLabel="Criando 3 posts completos...">Gerar 3 posts completos</SubmitButton>
             </form>
           </div>
 
           {comparisonVisuals.length > 0 && (
             <div className="modelCompareGrid">
               {comparisonVisuals.map((item) => (
-                <article className="modelCompareCard" key={item.id}>
-                  <div className="modelComparePost">
-                    <ModelComparisonSlide
-                      brandName={brand?.name || "Marca"}
-                      primaryColor={visualGuidelines?.primary_color}
-                      secondaryColor={visualGuidelines?.secondary_color}
-                      logoUrl={logoUrl}
-                      artDirection={content.art_direction}
-                      visualStyle={content.visual_style}
-                      visualFamily={content.visual_family}
-                      slide={(slides || [])[0]}
-                      totalSlides={(slides || []).length}
-                      imageUrl={item.image_url}
-                    />
+                <article className="modelCompareCard fullPostCompareCard" key={item.id}>
+                  <div
+                    className="modelCompareFullPost"
+                    style={item.image_url ? { backgroundImage: `url("${item.image_url}")` } : undefined}
+                    role="img"
+                    aria-label={`Post completo gerado por ${item.label}`}
+                  >
+                    {!item.image_url && <span>Sem preview</span>}
                   </div>
                   <div className="modelCompareMeta">
                     <div>
                       <b>{item.label}</b>
                       <small>{item.model}</small>
                     </div>
-                    <form action={applyComparisonVisual}>
-                      <input type="hidden" name="contentId" value={content.id} />
-                      <input type="hidden" name="comparisonId" value={item.id} />
-                      <SubmitButton className="secondaryBtn" pendingLabel="Aplicando...">Usar esta</SubmitButton>
-                    </form>
+                    <span className="fullPostBadge">ARTE FINAL IA</span>
                   </div>
                 </article>
               ))}
