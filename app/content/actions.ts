@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace-context";
 import { experimental_generateImage as generateImage } from "ai";
-import { buildFullPostImagePrompt, FULL_POST_PROMPT_MARKER, generateAndStoreVisuals } from "@/lib/visual-generation";
+import { buildFullPostImagePrompt, buildReferenceCarouselPrompt, FULL_POST_PROMPT_MARKER, REFERENCE_CAROUSEL_PROMPT_MARKER, generateAndStoreVisuals } from "@/lib/visual-generation";
 
 export async function updateContent(formData: FormData) {
   const contentId = String(formData.get("contentId") || "");
@@ -337,3 +337,175 @@ export async function compareImageModels(formData: FormData) {
   revalidatePath(`/content/${contentId}`);
   redirect(`/content/${contentId}?compare=1&compared=${successCount}`);
 }
+
+const SUNBURST_MODEL = "openai/gpt-image-2.5-sunburst";
+
+export async function generateSunburstCarouselFromReference(formData: FormData) {
+  const contentId = String(formData.get("contentId") || "");
+  const comparisonId = String(formData.get("comparisonId") || "");
+  if (!contentId || !comparisonId) redirect("/library");
+
+  const { supabase, workspace } = await getWorkspaceContext();
+
+  const [{ data: comparison }, { data: content }, { data: slides }] = await Promise.all([
+    supabase
+      .from("content_visual_comparisons")
+      .select("id,content_id,slide_id,image_path,model,label,prompt")
+      .eq("id", comparisonId)
+      .eq("content_id", contentId)
+      .eq("workspace_id", workspace.id)
+      .like("prompt", `${FULL_POST_PROMPT_MARKER}%`)
+      .maybeSingle(),
+    supabase
+      .from("contents")
+      .select("id,brand_id,type,content_archetype,art_direction,visual_family")
+      .eq("id", contentId)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("content_slides")
+      .select("id,position,headline,body,slide_role,visual_priority,badge,highlight")
+      .eq("content_id", contentId)
+      .eq("workspace_id", workspace.id)
+      .order("position"),
+  ]);
+
+  if (!comparison || !content || content.type !== "carousel" || !slides?.length || slides.length < 2) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não encontrei uma capa de referência ou um carrossel válido.")}`);
+  }
+
+  const cover = slides.find((slide) => slide.position === 1) || slides[0];
+  if (comparison.slide_id !== cover.id) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("A direção visual precisa partir da capa do carrossel.")}`);
+  }
+
+  const [{ data: brand }, { data: guidelines }, { data: referenceBlob, error: referenceError }] = await Promise.all([
+    supabase
+      .from("brands")
+      .select("name,segment")
+      .eq("id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase
+      .from("brand_guidelines")
+      .select("primary_color,secondary_color")
+      .eq("brand_id", content.brand_id)
+      .eq("workspace_id", workspace.id)
+      .maybeSingle(),
+    supabase.storage.from("content-assets").download(comparison.image_path),
+  ]);
+
+  if (!brand || referenceError || !referenceBlob) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não foi possível carregar a capa escolhida como referência.")}`);
+  }
+
+  const referenceBytes = Buffer.from(await referenceBlob.arrayBuffer());
+  const batchId = crypto.randomUUID();
+
+  const coverPrompt = [
+    REFERENCE_CAROUSEL_PROMPT_MARKER,
+    `REFERENCE COVER. Source comparison: ${comparison.id}.`,
+    "This image is the approved visual direction for the carousel.",
+  ].join(" ");
+
+  const { error: coverInsertError } = await supabase
+    .from("content_visual_comparisons")
+    .insert({
+      workspace_id: workspace.id,
+      content_id: contentId,
+      slide_id: cover.id,
+      batch_id: batchId,
+      model: comparison.model,
+      label: "01 · Capa referência",
+      image_path: comparison.image_path,
+      prompt: coverPrompt,
+    });
+
+  if (coverInsertError) {
+    redirect(`/content/${contentId}?error=${encodeURIComponent("Não foi possível iniciar o carrossel de referência.")}`);
+  }
+
+  const remainingSlides = slides.filter((slide) => slide.id !== cover.id);
+  const results = await Promise.allSettled(
+    remainingSlides.map(async (slide) => {
+      const prompt = buildReferenceCarouselPrompt({
+        brandName: brand.name,
+        segment: brand.segment,
+        archetype: content.content_archetype || "general",
+        artDirection: content.art_direction || "editorial",
+        visualFamily: content.visual_family || "atlas",
+        primaryColor: guidelines?.primary_color || null,
+        secondaryColor: guidelines?.secondary_color || null,
+        position: slide.position,
+        totalSlides: slides.length,
+        role: slide.slide_role || "body",
+        badge: slide.badge || null,
+        headline: slide.headline,
+        body: slide.body,
+        highlight: slide.highlight || null,
+      });
+
+      const generated = await generateImage({
+        model: SUNBURST_MODEL,
+        prompt: {
+          text: prompt,
+          images: [referenceBytes],
+        },
+        aspectRatio: "4:5",
+      });
+
+      const image = generated.images[0];
+      if (!image?.base64) throw new Error(`Sunburst returned no image for slide ${slide.position}`);
+
+      const mediaType = image.mediaType || "image/png";
+      const extension =
+        mediaType === "image/jpeg" ? "jpg" : mediaType === "image/webp" ? "webp" : "png";
+      const path = `${workspace.id}/${contentId}/reference-carousels/${batchId}/slide-${slide.position}-sunburst.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("content-assets")
+        .upload(path, Buffer.from(image.base64, "base64"), {
+          contentType: mediaType,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase
+        .from("content_visual_comparisons")
+        .insert({
+          workspace_id: workspace.id,
+          content_id: contentId,
+          slide_id: slide.id,
+          batch_id: batchId,
+          model: SUNBURST_MODEL,
+          label: `${String(slide.position).padStart(2, "0")} · Sunburst`,
+          image_path: path,
+          prompt,
+        });
+
+      if (insertError) {
+        await supabase.storage.from("content-assets").remove([path]);
+        throw insertError;
+      }
+
+      return slide.position;
+    })
+  );
+
+  const generatedCount = results.filter((result) => result.status === "fulfilled").length;
+  const failedCount = results.length - generatedCount;
+
+  if (generatedCount === 0) {
+    console.error("instabook.reference_carousel_failed", results);
+    redirect(`/content/${contentId}?error=${encodeURIComponent("O Sunburst não conseguiu gerar os próximos slides desta vez.")}`);
+  }
+
+  if (failedCount > 0) {
+    console.warn("instabook.reference_carousel_partial", { contentId, generatedCount, failedCount, results });
+  }
+
+  revalidatePath(`/content/${contentId}`);
+  redirect(`/content/${contentId}?carouselAi=1&carouselGenerated=${generatedCount}&carouselFailed=${failedCount}`);
+}
+

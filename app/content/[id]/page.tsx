@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getWorkspaceContext } from "@/lib/workspace-context";
-import { compareImageModels, deleteContent, generateCarouselVisuals, updateContent, uploadContentHero } from "@/app/content/actions";
+import { compareImageModels, deleteContent, generateCarouselVisuals, generateSunburstCarouselFromReference, updateContent, uploadContentHero } from "@/app/content/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { VisualCarousel } from "@/components/visual-carousel";
 
@@ -21,7 +21,7 @@ export default async function ContentPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; asset?: string; generated?: string; compare?: string; compared?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; asset?: string; generated?: string; compare?: string; compared?: string; carouselAi?: string; carouselGenerated?: string; carouselFailed?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { supabase, workspace } = await getWorkspaceContext();
@@ -124,6 +124,55 @@ export default async function ContentPage({
     );
   }
 
+  const { data: latestReferenceCarousel } = await supabase
+    .from("content_visual_comparisons")
+    .select("batch_id")
+    .eq("content_id", content.id)
+    .eq("workspace_id", workspace.id)
+    .like("prompt", "INSTABOOK_REFERENCE_CAROUSEL_V1%")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let referenceCarousel: Array<{
+    id: string;
+    label: string;
+    model: string;
+    position: number;
+    headline: string | null;
+    image_url: string | null;
+  }> = [];
+
+  if (latestReferenceCarousel?.batch_id) {
+    const { data: generatedCarousel } = await supabase
+      .from("content_visual_comparisons")
+      .select("id,label,model,image_path,slide_id")
+      .eq("content_id", content.id)
+      .eq("workspace_id", workspace.id)
+      .eq("batch_id", latestReferenceCarousel.batch_id)
+      .like("prompt", "INSTABOOK_REFERENCE_CAROUSEL_V1%");
+
+    referenceCarousel = (
+      await Promise.all(
+        (generatedCarousel || []).map(async (item) => {
+          const sourceSlide = (slides || []).find((slide) => slide.id === item.slide_id);
+          const { data } = await supabase.storage
+            .from("content-assets")
+            .createSignedUrl(item.image_path, 60 * 60 * 6);
+
+          return {
+            id: item.id,
+            label: item.label,
+            model: item.model,
+            position: sourceSlide?.position || 999,
+            headline: sourceSlide?.headline || null,
+            image_url: data?.signedUrl || null,
+          };
+        })
+      )
+    ).sort((a, b) => a.position - b.position);
+  }
+
   return (
     <AppShell>
       <header>
@@ -139,6 +188,12 @@ export default async function ContentPage({
       {query.asset === "hero" && <div className="formAlert successAlert pageAlert">Imagem do conteúdo atualizada.</div>}
       {query.asset === "ai" && <div className="formAlert successAlert pageAlert">{query.generated || "0"} visuais regenerados com IA.</div>}
       {query.compare && <div className="formAlert successAlert pageAlert">{query.compared || "0"} modelo(s) concluíram a comparação.</div>}
+      {query.carouselAi && (
+        <div className={Number(query.carouselFailed || 0) > 0 ? "formAlert errorAlert pageAlert" : "formAlert successAlert pageAlert"}>
+          Sunburst gerou {query.carouselGenerated || "0"} slide(s) a partir da capa de referência
+          {Number(query.carouselFailed || 0) > 0 ? ` e ${query.carouselFailed} falharam.` : "."}
+        </div>
+      )}
       {query.asset === "auto" && Number(query.generated || 0) > 0 && (
         <div className="formAlert successAlert pageAlert">Conteúdo criado com {query.generated} visuais gerados automaticamente.</div>
       )}
@@ -210,17 +265,60 @@ export default async function ContentPage({
                   >
                     {!item.image_url && <span>Sem preview</span>}
                   </div>
-                  <div className="modelCompareMeta">
-                    <div>
-                      <b>{item.label}</b>
-                      <small>{item.model}</small>
+                  <div className="modelCompareMeta modelCompareMetaStack">
+                    <div className="modelCompareMetaTop">
+                      <div>
+                        <b>{item.label}</b>
+                        <small>{item.model}</small>
+                      </div>
+                      <span className="fullPostBadge">ARTE FINAL IA</span>
                     </div>
-                    <span className="fullPostBadge">ARTE FINAL IA</span>
+                    {item.model === "openai/gpt-image-2.5-sunburst" && (slides || []).length > 1 && (
+                      <form className="referenceCarouselAction" action={generateSunburstCarouselFromReference}>
+                        <input type="hidden" name="contentId" value={content.id} />
+                        <input type="hidden" name="comparisonId" value={item.id} />
+                        <SubmitButton className="cta full" pendingLabel={`Gerando ${Math.max((slides || []).length - 1, 1)} slides...`}>
+                          Usar como direção + gerar {Math.max((slides || []).length - 1, 1)} slides
+                        </SubmitButton>
+                      </form>
+                    )}
                   </div>
                 </article>
               ))}
             </div>
           )}
+        </article>
+      )}
+
+      {referenceCarousel.length > 0 && (
+        <article className="panel referenceCarouselPanel">
+          <div className="referenceCarouselHead">
+            <div>
+              <span className="eyebrow">CARROSSEL SUNBURST — REFERÊNCIA VISUAL</span>
+              <h2>Mesma direção, composições diferentes</h2>
+              <p>A capa escolhida funciona como guia de identidade. Os demais slides foram gerados pelo Sunburst com a copy de cada posição, sem o template antigo por cima.</p>
+            </div>
+            <span className="referenceCarouselCount">{referenceCarousel.length} / {(slides || []).length} slides</span>
+          </div>
+          <div className="referenceCarouselGrid">
+            {referenceCarousel.map((item) => (
+              <article className="referenceCarouselCard" key={item.id}>
+                <div
+                  className="referenceCarouselImage"
+                  style={item.image_url ? { backgroundImage: `url("${item.image_url}")` } : undefined}
+                  role="img"
+                  aria-label={`Slide ${item.position} gerado com direção visual de referência`}
+                >
+                  {!item.image_url && <span>Sem preview</span>}
+                </div>
+                <div className="referenceCarouselMeta">
+                  <b>{String(item.position).padStart(2, "0")}</b>
+                  <span>{item.position === 1 ? "Capa referência" : "Sunburst"}</span>
+                  <small>{item.headline || ""}</small>
+                </div>
+              </article>
+            ))}
+          </div>
         </article>
       )}
 

@@ -72,6 +72,77 @@ export function selectSlidesForVisuals(slides: VisualSlideInput[], maxVisuals = 
 
 export const FULL_POST_PROMPT_MARKER = "INSTABOOK_FULL_POST_V1";
 
+export const REFERENCE_CAROUSEL_PROMPT_MARKER = "INSTABOOK_REFERENCE_CAROUSEL_V1";
+
+export function buildReferenceCarouselPrompt({
+  brandName,
+  segment,
+  archetype,
+  artDirection,
+  visualFamily,
+  primaryColor,
+  secondaryColor,
+  position,
+  totalSlides,
+  role,
+  badge,
+  headline,
+  body,
+  highlight,
+}: {
+  brandName: string;
+  segment: string | null;
+  archetype: string;
+  artDirection: string;
+  visualFamily: string;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  position: number;
+  totalSlides: number;
+  role: string;
+  badge: string | null;
+  headline: string | null;
+  body: string | null;
+  highlight: string | null;
+}) {
+  return [
+    REFERENCE_CAROUSEL_PROMPT_MARKER,
+    "Create the FINAL, READY-TO-PUBLISH next slide of an Instagram carousel.",
+    "The supplied reference image is slide 1 / the approved cover and is the visual source of truth.",
+    "Preserve the SAME visual identity: art direction, typography personality, font weight relationships, palette, contrast, shape language, photographic treatment, texture, margins and overall brand energy.",
+    "Do NOT simply copy the cover composition. Design a new composition appropriate to this slide's content while making it unmistakably part of the same carousel.",
+    "Canvas: vertical 4:5, equivalent to 1080x1350, edge-to-edge finished artwork.",
+    `Brand: ${brandName}. Segment: ${segment || "business"}.`,
+    `Carousel: slide ${position} of ${totalSlides}. Role: ${role}. Archetype: ${archetype}. Art direction: ${artDirection}. Visual family: ${visualFamily}.`,
+    primaryColor ? `Primary brand color: ${primaryColor}.` : "",
+    secondaryColor ? `Secondary brand color: ${secondaryColor}.` : "",
+    "TEXT FIDELITY IS CRITICAL. Render the Portuguese copy below exactly as written, with correct spelling and accents.",
+    "Do not paraphrase, translate, invent numbers, add extra claims, repeat phrases or create placeholder text.",
+    badge ? `BADGE: "${badge}"` : "BADGE: omit if not needed.",
+    `MAIN HEADLINE: "${headline || ""}"`,
+    highlight ? `SUPPORTING HIGHLIGHT: "${highlight}"` : "",
+    body ? `SUPPORTING BODY: "${body}"` : "",
+    "Maintain a clear mobile-first hierarchy. The headline is primary; supporting copy must remain secondary and readable.",
+    role === "item"
+      ? "This is an item/list slide. Make the item identifier visible but avoid repeating it inside the headline."
+      : "",
+    role === "cta"
+      ? "This is the closing CTA slide. Give it a satisfying visual conclusion and clear next-action hierarchy."
+      : "",
+    role === "comparison"
+      ? "This is a comparison slide. Use a clear two-part visual structure while preserving the reference design language."
+      : "",
+    "Use imagery as an integrated design element rather than wallpaper. Vary crops and placement across the carousel while keeping one coherent campaign.",
+    "Do not invent or redesign the brand logo. If a logo symbol is uncertain, use the brand name as clean text only.",
+    "No phone mockup, no Instagram interface, no watermark, no lorem ipsum, no gibberish, no extra captions.",
+    "Deliver only the finished post artwork.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+
+
 export function buildFullPostImagePrompt({
   brandName,
   segment,
