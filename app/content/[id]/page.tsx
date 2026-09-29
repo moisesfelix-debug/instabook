@@ -190,11 +190,11 @@ export default async function ContentPage({
             <div>
               <span className="eyebrow">LAB — POST COMPLETO POR IA</span>
               <h2>Qual IA consegue dirigir a arte melhor?</h2>
-              <p>Os três modelos recebem a mesma marca, copy e direção. Cada um desenha sozinho a capa 4:5 completa — tipografia, imagem, composição, hierarquia e elementos gráficos. Nenhum template do InstaBook é aplicado por cima.</p>
+              <p>Os quatro modelos recebem a mesma marca, copy e direção. Cada um desenha sozinho a capa 4:5 completa — tipografia, imagem, composição, hierarquia e elementos gráficos. Nenhum template do InstaBook é aplicado por cima.</p>
             </div>
             <form action={compareImageModels}>
               <input type="hidden" name="contentId" value={content.id} />
-              <SubmitButton className="secondaryBtn" pendingLabel="Criando 3 posts completos...">Gerar 3 posts completos</SubmitButton>
+              <SubmitButton className="secondaryBtn" pendingLabel="Criando 4 posts completos...">Gerar 4 posts completos</SubmitButton>
             </form>
           </div>
 

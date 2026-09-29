@@ -209,6 +209,7 @@ const IMAGE_COMPARISON_MODELS = [
   { model: "recraft/recraft-v4.1", label: "Recraft V4.1" },
   { model: "recraft/recraft-v4.1-pro", label: "Recraft V4.1 Pro" },
   { model: "openai/gpt-image-2.5-flare", label: "GPT Image 2.5 Flare" },
+  { model: "openai/gpt-image-2.5-sunburst", label: "GPT Image 2.5 Sunburst" },
 ] as const;
 
 export async function compareImageModels(formData: FormData) {
